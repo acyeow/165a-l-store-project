@@ -30,8 +30,23 @@ class Query:
     # Returns False if insert fails for whatever reason
     """
     def insert(self, *columns):
-        schema_encoding = '0' * self.table.num_columns
-        pass
+        try:
+        
+            if len(columns) != self.table.num_columns:
+                return False
+
+            key_column = columns[self.table.key]
+            existing_records = self.select(key_column, self.table.key, [1])
+            if existing_records:  # If any records found
+                return False
+            
+            schema_encoding = '0' * self.table.num_columns
+            #Unfinished
+            return True
+        
+        except Exception as e:
+            print(f"Insert failed: {e}")
+            return False
 
     
     """
