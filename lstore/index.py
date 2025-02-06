@@ -3,7 +3,7 @@ A data strucutre holding indices for various columns of a table. Key column shou
 """
 
 # B-Tree Implementation for indexing
-# Define a class for B-Tree nodes, including the leaf status, keys, and children
+# Node structure: leaf status, keys, and children
 class BTreeNode:
 	def __init__(self, leaf=False):
 		self.leaf = leaf
@@ -19,7 +19,6 @@ class BTree:
 
 	# Search operation
 	def search(self, node, key):
-		# Initialization
 		i = 0
 
 		# Search keys until the key is found
@@ -28,41 +27,41 @@ class BTree:
 
 		# return the node if the key matches
 		if (i < len(node.keys)) and (node.keys[i] == key):
-            return node.keys[i]
+			return node.keys[i]
 
-        # If the key does not exist and the node is a leaf, the return none
-        if node.leaf:
-            return None
+		# If the key does not exist and the node is a leaf, the return none
+		if node.leaf:
+			return None
 
 		# keep searching deeper if the node isn't found
-        return self.search(node.children[i], key)
+		return self.search(node.children[i], key)
 
 	# Traverse operation
-    def traverse(self, node, begin=None, end=None, result=[]):
-        # if the node does not exist, then return the root
-        if node is None:
-            return result
+	def traverse(self, node, begin=None, end=None, result=[]):
+		# if the node does not exist, then return the root
+		if node is None:
+			return result
 
         # traverse through the nodes from left to right
-        for i in range(len(node.keys)):
-            if not node.leaf:
-                self.traverse(node.children[i], begin, end, result)
+		for i in range(len(node.keys)):
+			if not node.leaf:
+				self.traverse(node.children[i], begin, end, result)
 
-            if (begin is None or node.keys[i] >= begin) and (end is None or node.keys[i] <= end):
-                result.append(node.keys[i])
+			if (begin is None or node.keys[i] >= begin) and (end is None or node.keys[i] <= end):
+				result.append(node.keys[i])
 
-        if not node.leaf:
-            self.traverse(node.children[-1], begin, end, result)
-        return result
+		if not node.leaf:
+			self.traverse(node.children[-1], begin, end, result)
+		return result
 
 	# Insertion operation
 	def insert(self, key):
 		# check the node to insert into and split it if full
 		root = self.root
 
-		if len(self.root.keys) == (self.t * 2) - 1:
+		if len(root.keys) == (self.t * 2) - 1:
 			new = BTreeNode(False)
-			new.children.append(self.root)
+			new.children.append(root)
 			self.split(new, 0, root)
 			self.root = new
 
@@ -71,73 +70,70 @@ class BTree:
 
 
 	# Insertion operation for non-full nodes
-    def insert_non_full(self, node, key):
-        i = len(node.keys) - 1
+	def insert_non_full(self, node, key):
+		i = len(node.keys) - 1
 
-        if node.leaf:
-            node.keys.append(None)
-            while i >= 0 and key < node.keys[i]:
-                node.keys[i + 1] = node.keys[i]
-                i -= 1
-            node.keys[i + 1] = key
+		if node.leaf:
+			node.keys.append(None)
+			while i >= 0 and key < node.keys[i]:
+				node.keys[i + 1] = node.keys[i]
+				i -= 1
+			node.keys[i + 1] = key
 
-        else:
-            while i >= 0 and key < node.keys[i]:
-                i -= 1
-            i += 1
+		else:
+			while i >= 0 and key < node.keys[i]:
+				i -= 1
+			i += 1
 
-            if len(node.children[i].keys) == (2 * self.t) - 1:
-                self.split(node, i, node.children[i])
-                if key > node.keys[i]:
-                    i += 1
+			if len(node.children[i].keys) == (2 * self.t) - 1:
+				self.split(node, i, node.children[i])
+				if key > node.keys[i]:
+					i += 1
 
-            self.insert_non_full(node.children[i], key)
+			self.insert_non_full(node.children[i], key)
 
 
 	# Split function for splitting full nodes
 	def split(self, parent, i, child):
 		# split the keys from the middle
 		t = self.t
-        new = BTreeNode(child.leaf)
-        parent.keys.insert(i, child.keys[t - 1])
-        parent.children.insert(i + 1, new)
-        new.keys = child.keys[t:(2 * t) - 1]
-        child.keys = child.keys[0:t - 1]
+		new = BTreeNode(child.leaf)
+		parent.keys.insert(i, child.keys[t - 1])
+		parent.children.insert(i + 1, new)
+		new.keys = child.keys[t:(2 * t) - 1]
+		child.keys = child.keys[0:t - 1]
 
-        if not child.leaf:
-               new.children = child.children[t:(2 * t)]
-               child.children = child.children[0:t]
+		if not child.leaf:
+			new.children = child.children[t:(2 * t)]
+			child.children = child.children[0:t]
 
 	# Deletion operation
-    def delete(self, key):
-        if not self.root:
-            return
+	def delete(self, key):
+		if not self.root:
+			return
 
-        self.delete_internal(self.root, key)
-        if len(self.root.keys) == 0:  # Shrinking tree
-            if not self.root.leaf:
-                self.root = self.root.children[0]
+		self.delete_internal(self.root, key)
 
-            else:
-                self.root = None
+		if not self.root.keys and not self.root.leaf:
+			self.root = self.root.children[0]
 
 	# Helper function for deletion operation
 	def delete_internal(self, node, key):
-        i = 0
+		i = 0
 
-        while i < len(node.keys) and key > node.keys[i]:
-            i += 1
+		while i < len(node.keys) and key > node.keys[i]:
+			i += 1
 
-        if i < len(node.keys) and node.keys[i] == key:
-            if node.leaf:
-                node.keys.pop(i)
+		if i < len(node.keys) and node.keys[i] == key:
+			if node.leaf:
+				node.keys.pop(i)
 
-            else:
-                node.keys[i] = self._get_predecessor(node.children[i])
-                self.delete_internal(node.children[i], node.keys[i])
+			else:
+				node.keys[i] = self.get_predecessor(node.children[i])
+				self.delete_internal(node.children[i], node.keys[i])
 
-        elif not node.leaf:
-            self.delete_internal(node.children[i], key)
+		elif not node.leaf:
+			self.delete_internal(node.children[i], key)
 
 	# Operation for getting predecessor node
 	def get_predecessor(self, node):
@@ -204,5 +200,5 @@ class Index:
 
 	# Delete a value from the index
 	def delete(self, column, value):
-            if column < len(self.indices) and self.indices[column] is not None:
-                self.indices[column].delete(value)
+        if column < len(self.indices) and self.indices[column] is not None:
+			self.indices[column].delete(value)
