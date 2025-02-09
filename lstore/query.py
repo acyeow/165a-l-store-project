@@ -21,7 +21,21 @@ class Query:
     # Return False if record doesn't exist or is locked due to 2PL
     """
     def delete(self, primary_key):
-        pass
+        try:
+            #This is if the the record doesn't exist; unsure what is 2PL
+            existing_records = self.select(primary_key, self.table.key, [1]*self.table.num_columns)
+            if not existing_records:
+                return False
+
+            #Unsure for now
+            base_record = existing_records[0]
+            #Need to figure out how to tell which column is the indrection column to reset
+            #THis should mark as deleted
+            base_record.columns[1] = -1  
+            return True
+        except Exception as e:
+            print(f"Delete failed: {e}")
+            return False
     
     
     """
@@ -29,20 +43,29 @@ class Query:
     # Return True upon succesful insertion
     # Returns False if insert fails for whatever reason
     """
-    def insert(self, *columns):
+    def insert(self, *columns): #Looking at exam_tester insert(1,2,3,4)
         try:
-        
+            #Check formatting is consistent (same # of col)
             if len(columns) != self.table.num_columns:
                 return False
 
+            #Check if the data already exists
             key_column = columns[self.table.key]
             existing_records = self.select(key_column, self.table.key, [1])
-            if existing_records:  # If any records found
+            if existing_records:  
                 return False
             
+            #Initially all 0's
             schema_encoding = '0' * self.table.num_columns
-            #Unfinished
-            return True
+            #Get RID from table
+            rid = self.table.current_rid
+            indirection = rid
+
+            #Need to make a record using insert_record from table.py, unsure how to format a record
+            all_columns = [rid, indirection, schema_encoding, columns]
+            record = Record(rid, key_column, all_columns)
+
+            return self.table.insert_record(record)
         
         except Exception as e:
             print(f"Insert failed: {e}")
@@ -82,7 +105,25 @@ class Query:
     # Returns False if no records exist with given key or if the target record cannot be accessed due to 2PL locking
     """
     def update(self, primary_key, *columns):
-        pass
+        try:
+            #Check if record exists
+            existing_records = self.select(primary_key, self.table.key, [1]*self.table.num_columns)
+            if not existing_records:
+                return False
+
+            base_record = existing_records[0]
+            rid = base_record.rid
+
+            #Check if format matches
+            updated_columns = list(columns)
+            if len(updated_columns) != self.table.num_columns:
+                return False
+
+            #Create tail page using the update_record function in table.py
+            return self.table.update_record(rid, updated_columns)
+        except Exception as e:
+            print(f"Update failed: {e}")
+            return False
 
     
     """
