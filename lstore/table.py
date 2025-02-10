@@ -85,6 +85,36 @@ class Table:
                 schema_encoding |= (1 << i)
         return schema_encoding
     
+    def get_record_by_rid(self, rid):
+        
+        # Look up the page range that contains this RID
+        page_range = self.page_directory.get(rid, None)
+        if page_range is None:
+            return None
+        
+        return page_range.get_record(rid)
+    
+    def get_latest_record(self, rid):
+        
+        base_record = self.get_record_by_rid(rid)
+        if base_record is None:
+            return None
+
+        # If no update, its indirection pointer is assumed to be -1 or None
+        if base_record.columns[1] in (None, -1):
+            return base_record
+
+        latest_record = base_record
+        # While the current record has a valid indirection pointer, get its tail record
+        while latest_record.columns[1] not in (None, -1):
+            tail_rid = latest_record.columns[1]
+            tail_record = self.get_record_by_rid(tail_rid)
+            if tail_record is None:
+                break
+            latest_record = tail_record
+
+        return latest_record
+    
     def __merge(self):
         print("merge is happening")
         pass

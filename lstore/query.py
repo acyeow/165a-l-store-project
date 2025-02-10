@@ -101,7 +101,27 @@ class Query:
     # Assume that select will never be called on a key that doesn't exist
     """
     def select(self, search_key, search_key_index, projected_columns_index):
-        pass
+        result = []
+        # Use helper function to obtain RIDs matching the search key
+        rids = self.table.lookup_by_value(search_key, search_key_index)
+        
+        for rid in rids:
+            # Retrieve the latest version
+            record = self.table.get_latest_record(rid)
+            
+            # If the record is locked by TPL
+            if hasattr(record, 'locked') and record.locked:
+                return False
+            
+            projected_values = []
+            # Assume that len(projected_columns_index) equals the number of columns in record.values.
+            for i, flag in enumerate(projected_columns_index):
+                if flag == 1:
+                    projected_values.append(record.values[i])
+            new_record = Record(projected_values)
+            result.append(new_record)
+    
+        return result
 
     
     """
