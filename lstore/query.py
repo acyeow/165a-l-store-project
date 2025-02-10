@@ -184,34 +184,35 @@ class Query:
     # Returns False if no record exists in the given range
     """
     def sum(self, start_range, end_range, aggregate_column_index):
-        total = 0
-        found_records = False
+        try:
+            total = 0
+            found_records = False
 
-        # Iterate through all keys in the range
-        for key in range(start_range, end_range + 1):
-            # Use the index to find the RID(s) associated with the key
-            rids = self.table.index.locate(self.table.key, key)
-            if not rids:
-                continue  # Skip if no records match the key
+            # Iterate through all keys in the range
+            for key in range(start_range, end_range + 1):
+                # Use the index to find the RID(s) associated with the key
+                rids = self.table.index.locate(self.table.key, key)
+                if not rids:
+                    continue  # Skip if no records match the key
 
-            for rid in rids:
-                # Fetch the record from the page directory
-                record = self.table.get_record(rid)
-                if not record:
-                    continue  # Skip if the record doesn't exist
+                for rid in rids:
+                    # Fetch the record from the page directory
+                    record = self.table.get_record(rid)
+                    if not record:
+                        continue  # Skip if the record doesn't exist
 
-                # Add the value of the specified column to the total
-                total += record.columns[aggregate_column_index]
-                found_records = True
+                    # Add the value of the specified column to the total
+                    total += record.columns[aggregate_column_index]
+                    found_records = True
 
-        if not found_records:
-            return False  # No records found in the range
+            if not found_records:
+                return False  # No records found in the range
 
-        return total
+            return total
 
-    except Exception as e:
-        print(f"Sum failed: {e}")
-        return False
+        except Exception as e:
+            print(f"Sum failed: {e}")
+            return False
 
     
     """
@@ -224,39 +225,40 @@ class Query:
     # Returns False if no record exists in the given range
     """
     def sum_version(self, start_range, end_range, aggregate_column_index, relative_version):
-        total = 0
-        found_records = False
+        try:
+            total = 0
+            found_records = False
 
-        # Iterate through all keys in the range
-        for key in range(start_range, end_range + 1):
-            # Use the index to find the RID(s) associated with the key
-            rids = self.table.index.locate(self.table.key, key)
-            if not rids:
-                continue  # Skip if no records match the key
+            # Iterate through all keys in the range
+            for key in range(start_range, end_range + 1):
+                # Use the index to find the RID(s) associated with the key
+                rids = self.table.index.locate(self.table.key, key)
+                if not rids:
+                    continue  # Skip if no records match the key
 
-            for rid in rids:
-                # Fetch the record from the page directory
-                record = self.table.get_record(rid)
-                if not record:
-                    continue  # Skip if the record doesn't exist
+                for rid in rids:
+                    # Fetch the record from the page directory
+                    record = self.table.get_record(rid)
+                    if not record:
+                        continue  # Skip if the record doesn't exist
 
-                # Fetch the specified version of the record
-                versioned_columns = self.__fetch_versioned_columns(record, relative_version)
-                if not versioned_columns:
-                    continue  # Skip if the version doesn't exist
+                    # Fetch the specified version of the record
+                    versioned_columns = self.__fetch_versioned_columns(record, relative_version)
+                    if not versioned_columns:
+                        continue  # Skip if the version doesn't exist
 
-                # Add the value of the specified column to the total
-                total += versioned_columns[aggregate_column_index]
-                found_records = True
+                    # Add the value of the specified column to the total
+                    total += versioned_columns[aggregate_column_index]
+                    found_records = True
 
-        if not found_records:
-            return False  # No records found in the range
+            if not found_records:
+                return False  # No records found in the range
 
-        return total
+            return total
 
-    except Exception as e:
-        print(f"Sum version failed: {e}")
-        return False
+        except Exception as e:
+            print(f"Sum version failed: {e}")
+            return False
 
 
     
