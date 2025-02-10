@@ -1,4 +1,5 @@
-from lstore.index import Index, PageRange
+from lstore.index import Index
+from lstore.page import PageRange
 from time import time
 
 INDIRECTION_COLUMN = 0

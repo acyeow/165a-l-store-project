@@ -1,4 +1,5 @@
-from lstore.table import Table, Index
+from lstore.table import Table
+from lstore.index import Index
 
 class Database():
 

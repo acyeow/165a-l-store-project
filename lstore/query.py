@@ -50,6 +50,8 @@ class Query:
             
             #Set base page RID to -1
             base_record.columns[0] = -1  
+
+            #Most likely will need to remove the data from the index; need to figure out how to call
             return True
         
         except Exception as e:
@@ -88,6 +90,7 @@ class Query:
                 return False
             
             #Put into index
+            #Call the B-tree insert
             
             return True
         
@@ -164,6 +167,8 @@ class Query:
                 return False
 
             #Create tail page using the update_record function in table.py
+            #When a record is updated, update the index to point towards tail page instead?
+
             return self.table.update_record(rid, updated_columns)
         except Exception as e:
             print(f"Update failed: {e}")
@@ -179,7 +184,6 @@ class Query:
     # Returns False if no record exists in the given range
     """
     def sum(self, start_range, end_range, aggregate_column_index):
-    try:
         total = 0
         found_records = False
 
@@ -220,7 +224,6 @@ class Query:
     # Returns False if no record exists in the given range
     """
     def sum_version(self, start_range, end_range, aggregate_column_index, relative_version):
-    try:
         total = 0
         found_records = False
 
