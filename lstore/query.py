@@ -84,7 +84,12 @@ class Query:
             all_columns = [rid, indirection, schema_encoding, columns]
             record = Record(rid, key_column, all_columns)
 
-            return self.table.insert_record(record)
+            if not self.table.insert_record(record):
+                return False
+            
+            #Put into index
+            
+            return True
         
         except Exception as e:
             print(f"Insert failed: {e}")

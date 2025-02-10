@@ -1,4 +1,4 @@
-from lstore.table import Table
+from lstore.table import Table, Index
 
 class Database():
 
@@ -27,6 +27,10 @@ class Database():
     
         table = Table(name, num_columns, key_index)
         self.tables.append(table)
+
+        for i in range (0, num_columns):
+            table.index.create_index(i)
+
         return table
 
     
@@ -34,9 +38,13 @@ class Database():
     # Deletes the specified table
     """
     def drop_table(self, name):
-        
         for i, table in enumerate(self.tables):
             if table.name == name:
+                #Drop all indices for specified table
+                for col in range(table.num_columns):
+                    table.index.drop_index(col)
+                
+                #Then remove table
                 self.tables.pop(i)
                 return
         
