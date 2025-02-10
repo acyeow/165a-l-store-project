@@ -209,7 +209,7 @@ class Index:
         # Drop index for the column
         self.indices[column_number] = None
 
-	# Delete a value from the index
-	def delete(self, column, value):
-		if column < len(self.indices) and self.indices[column] is not None:
-			self.indices[column].delete(value)
+    # Delete a value from the index
+    def delete(self, column, value):
+      if column < len(self.indices) and self.indices[column] is not None:
+        self.indices[column].delete(value)
