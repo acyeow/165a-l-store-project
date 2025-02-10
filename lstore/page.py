@@ -1,3 +1,5 @@
+from lstore.table import Record
+
 class Page:
 
     def __init__(self):
@@ -73,3 +75,37 @@ class PageRange:
                     self.pages[i].append(self.current_tail_page[i])
                     self.current_tail_page[i].write(column_value)
         return True
+
+    def get_record(self, rid):
+        # Basically the current record's position
+        offset = rid - self.start_rid
+        record_columns = []
+        num_columns = len(self.pages)
+        
+        for i in range(num_columns):
+            # if self.pages[i] have been converted to a list
+            if self.is_base:
+                # Base page range, one page per column
+                value = self.pages[i].read(offset)
+            else:
+                # if self.pages[i] is not a list, wrap it in a list
+                if isinstance(self.pages[i], list):
+                    page_list = self.pages[i]
+                else:
+                    page_list = [self.pages[i]]
+                    
+                # Find the page that contains the record at this offset
+                index = offset
+                value = None
+                for page in page_list:
+                    # Record is in this page
+                    if index < page.num_records:
+                        value = page.read(index)
+                        break
+                    else:
+                        #Record is not in the page, subtract num_records from this page to go to next page in list
+                        index -= page.num_records
+            record_columns.append(value)
+        
+        # Record constructor needs key but since PageRange does not store the key, we can just pass None for now
+        return Record(rid, None, record_columns)
