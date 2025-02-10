@@ -101,7 +101,34 @@ class Query:
     # Assume that select will never be called on a key that doesn't exist
     """
     def select(self, search_key, search_key_index, projected_columns_index):
-        pass
+    try:
+        # Use the index to find the RID(s) associated with the search key
+        rids = self.table.lookup_by_value(search_key, search_key_index)
+        if not rids:
+            return False  # No matching records found
+
+        records = []
+        for rid in rids:
+            # Fetch the record from the page directory
+            record = self.table.get_record(rid)
+            if not record:
+                continue  # Skip if the record doesn't exist
+
+            # Project the specified columns
+            projected_columns = []
+            for i, include in enumerate(projected_columns_index):
+                if include:
+                    projected_columns.append(record.columns[i])
+
+            # Create a new Record object with the projected columns
+            projected_record = Record(record.rid, record.key, projected_columns)
+            records.append(projected_record)
+
+        return records
+
+    except Exception as e:
+        print(f"Select failed: {e}")
+        return False
 
     
     """
@@ -154,7 +181,35 @@ class Query:
     # Returns False if no record exists in the given range
     """
     def sum(self, start_range, end_range, aggregate_column_index):
-        pass
+    try:
+        total = 0
+        found_records = False
+
+        # Iterate through all keys in the range
+        for key in range(start_range, end_range + 1):
+            # Use the index to find the RID(s) associated with the key
+            rids = self.table.index.locate(self.table.key, key)
+            if not rids:
+                continue  # Skip if no records match the key
+
+            for rid in rids:
+                # Fetch the record from the page directory
+                record = self.table.get_record(rid)
+                if not record:
+                    continue  # Skip if the record doesn't exist
+
+                # Add the value of the specified column to the total
+                total += record.columns[aggregate_column_index]
+                found_records = True
+
+        if not found_records:
+            return False  # No records found in the range
+
+        return total
+
+    except Exception as e:
+        print(f"Sum failed: {e}")
+        return False
 
     
     """
@@ -167,7 +222,40 @@ class Query:
     # Returns False if no record exists in the given range
     """
     def sum_version(self, start_range, end_range, aggregate_column_index, relative_version):
-        pass
+    try:
+        total = 0
+        found_records = False
+
+        # Iterate through all keys in the range
+        for key in range(start_range, end_range + 1):
+            # Use the index to find the RID(s) associated with the key
+            rids = self.table.index.locate(self.table.key, key)
+            if not rids:
+                continue  # Skip if no records match the key
+
+            for rid in rids:
+                # Fetch the record from the page directory
+                record = self.table.get_record(rid)
+                if not record:
+                    continue  # Skip if the record doesn't exist
+
+                # Fetch the specified version of the record
+                versioned_columns = self.__fetch_versioned_columns(record, relative_version)
+                if not versioned_columns:
+                    continue  # Skip if the version doesn't exist
+
+                # Add the value of the specified column to the total
+                total += versioned_columns[aggregate_column_index]
+                found_records = True
+
+        if not found_records:
+            return False  # No records found in the range
+
+        return total
+
+    except Exception as e:
+        print(f"Sum version failed: {e}")
+        return False
 
     
     """
