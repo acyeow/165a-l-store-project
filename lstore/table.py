@@ -1,4 +1,4 @@
-from lstore.index import Index
+from lstore.index import Index, PageRange
 from time import time
 
 INDIRECTION_COLUMN = 0
@@ -6,11 +6,14 @@ RID_COLUMN = 1
 TIMESTAMP_COLUMN = 2
 SCHEMA_ENCODING_COLUMN = 3
 
-
 class Record:
     def __init__(self, rid, key, columns):
         self.rid = rid
         self.key = key
+        #Columns[0] = RID
+        #Columns[1] = Indirection
+        #Columns[2] = Schema Encoding
+        #Columns[3] = Data 
         self.columns = columns
 
 class PageRangeFinder:

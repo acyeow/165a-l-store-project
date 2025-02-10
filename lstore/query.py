@@ -19,6 +19,7 @@ class Query:
     # Read a record with specified RID
     # Returns True upon succesful deletion
     # Return False if record doesn't exist or is locked due to 2PL
+    #When a record is deleted, the base record will be invalidated by setting its RID and all its tail records to a special value (-1). 
     """
     def delete(self, primary_key):
         try:
@@ -27,12 +28,30 @@ class Query:
             if not existing_records:
                 return False
 
-            #Unsure for now
+            #If the record exists, 
             base_record = existing_records[0]
-            #Need to figure out how to tell which column is the indrection column to reset
-            #THis should mark as deleted
-            base_record.columns[1] = -1  
+            current_rid = base_record.rid
+            #Latest Tail Page
+            current_indirection = base_record.columns[1]
+
+            #If the base page isn't the latest version
+            if current_indirection != current_rid:
+                #Traverse the tail pages (Most recent to oldest)
+                while current_indirection != base_record.rid:
+
+                    #Get tail record
+                    #tail_record = 
+                    #Set RID to -1
+                    #tail_record.columns[0] = -1
+                    #Move to next tail via indirection column
+                    #current_indirection = tail_record.columns[1]
+
+                    pass
+            
+            #Set base page RID to -1
+            base_record.columns[0] = -1  
             return True
+        
         except Exception as e:
             print(f"Delete failed: {e}")
             return False
@@ -49,9 +68,9 @@ class Query:
             if len(columns) != self.table.num_columns:
                 return False
 
-            #Check if the data already exists
+            #Check if the data already exists (dupe key)
             key_column = columns[self.table.key]
-            existing_records = self.select(key_column, self.table.key, [1])
+            existing_records = self.select(key_column, self.table.key, [1]*self.table.num_columns)
             if existing_records:  
                 return False
             
@@ -61,7 +80,7 @@ class Query:
             rid = self.table.current_rid
             indirection = rid
 
-            #Need to make a record using insert_record from table.py, unsure how to format a record
+            #Need to make a record using insert_record from table.py, unsure how to format a record 
             all_columns = [rid, indirection, schema_encoding, columns]
             record = Record(rid, key_column, all_columns)
 
