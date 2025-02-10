@@ -3,11 +3,12 @@ A data strucutre holding indices for various columns of a table. Key column shou
 """
 
 # B-Tree Implementation for indexing
-# Node structure: leaf status, keys, and children
+# Node structure: leaf status, keys, rids, and children
 class BTreeNode:
-	def __init__(self, leaf=False):
+	def __init__(self, leaf = False):
 		self.leaf = leaf
 		self.keys = []
+		self.rids = []
 		self.children = []
 
 # B-Tree
@@ -27,7 +28,7 @@ class BTree:
 
 		# return the node if the key matches
 		if (i < len(node.keys)) and (node.keys[i] == key):
-			return node.keys[i]
+			return node.rids[i]
 
 		# If the key does not exist and the node is a leaf, the return none
 		if node.leaf:
@@ -37,7 +38,10 @@ class BTree:
 		return self.search(node.children[i], key)
 
 	# Traverse operation
-	def traverse(self, node, begin=None, end=None, result=[]):
+	def traverse(self, node, begin = None, end = None, result = None):
+		if result is None:
+			result = []
+
 		# if the node does not exist, then return the root
 		if node is None:
 			return result
@@ -48,14 +52,14 @@ class BTree:
 				self.traverse(node.children[i], begin, end, result)
 
 			if (begin is None or node.keys[i] >= begin) and (end is None or node.keys[i] <= end):
-				result.append(node.keys[i])
+				result.append(node.rids[i])
 
 		if not node.leaf:
 			self.traverse(node.children[-1], begin, end, result)
 		return result
 
 	# Insertion operation
-	def insert(self, key):
+	def insert(self, key, rid):
 		# check the node to insert into and split it if full
 		root = self.root
 
@@ -66,19 +70,24 @@ class BTree:
 			self.root = new
 
 		# insert non full
-		self.insert_non_full(self.root, key)
+		self.insert_non_full(self.root, key, rid)
 
 
 	# Insertion operation for non-full nodes
-	def insert_non_full(self, node, key):
+	def insert_non_full(self, node, key, rid):
 		i = len(node.keys) - 1
 
 		if node.leaf:
-			node.keys.append(None)
 			while i >= 0 and key < node.keys[i]:
-				node.keys[i + 1] = node.keys[i]
 				i -= 1
-			node.keys[i + 1] = key
+			i += 1
+
+			# Put rid in the same location as the key in parallel
+			if i < len(node.keys) and node.keys[i] == key:
+				node.rids[i] = rid
+			else:
+				node.keys.insert(i, key)
+				node.rids.insert(i, rid)
 
 		else:
 			while i >= 0 and key < node.keys[i]:
@@ -90,8 +99,7 @@ class BTree:
 				if key > node.keys[i]:
 					i += 1
 
-			self.insert_non_full(node.children[i], key)
-
+			self.insert_non_full(node.children[i], key, rid)
 
 	# Split function for splitting full nodes
 	def split(self, parent, i, child):
@@ -101,7 +109,9 @@ class BTree:
 		parent.keys.insert(i, child.keys[t - 1])
 		parent.children.insert(i + 1, new)
 		new.keys = child.keys[t:(2 * t) - 1]
+		new.rids = child.rids[t:(2 * t) - 1]
 		child.keys = child.keys[0:t - 1]
+		child.rids = child.rids[0:t - 1]
 
 		if not child.leaf:
 			new.children = child.children[t:(2 * t)]
@@ -127,6 +137,7 @@ class BTree:
 		if i < len(node.keys) and node.keys[i] == key:
 			if node.leaf:
 				node.keys.pop(i)
+				node.rids.pop(i)
 
 			else:
 				node.keys[i] = self.get_predecessor(node.children[i])
@@ -137,11 +148,11 @@ class BTree:
 
 	# Operation for getting predecessor node
 	def get_predecessor(self, node):
-		# keep going down the tree until you hit the leaf, then return the node before the leaf
+		node = node.children[-1]
 		while not node.leaf:
 			node = node.children[-1]
 
-		return node.keys[-1]
+		return node.rids[-1]
 
 class Index:
 
@@ -186,7 +197,7 @@ class Index:
         # Create index for the column
         for rid, record in self.table.page_directory.items():
             value = record.columns[column_number]
-            self.indices[column_number].insert(value)
+            self.indices[column_number].insert(value, rid)
     """
     # optional: Drop index of specific column
     """
@@ -200,6 +211,5 @@ class Index:
 
 	# Delete a value from the index
 	def delete(self, column, value):
-        
 		if column < len(self.indices) and self.indices[column] is not None:
 			self.indices[column].delete(value)
