@@ -1,5 +1,4 @@
 from lstore.index import Index
-from lstore.page import PageRange
 from time import time
 
 INDIRECTION_COLUMN = 0
@@ -44,6 +43,7 @@ class Table:
         self.current_rid = 0
 
     def create_page_range(self, is_base=True):
+        from lstore.page import PageRange
         start_rid = self.current_rid
         end_rid = start_rid + 999
         page_range = PageRange(start_rid, end_rid, self.num_columns, is_base)
