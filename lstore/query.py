@@ -77,32 +77,40 @@ class Query:
             if len(columns) != self.table.num_columns:
                 return False
 
+            if self.table.key >= len(columns):
+                return False
+
             #Check if the data already exists (dupe key)
             key_column = columns[self.table.key]
             existing_records = self.select(key_column, self.table.key, [1]*self.table.num_columns)
-            if existing_records:  
+            if existing_records:
                 return False
             
             #Initially all 0's
-            schema_encoding = '0' * self.table.num_columns
+            schema_encoding = 0
             #Get RID from table
             rid = self.table.current_rid
             indirection = rid
 
-            #Need to make a record using insert_record from table.py, unsure how to format a record 
-            all_columns = [rid, indirection, schema_encoding, columns] + list(columns)
-            record = Record(rid, key_column, all_columns)
+            #Need to make a record using insert_record from table.py, unsure how to format a record
+            record_metadata = [rid, indirection, schema_encoding]
+            record = Record(rid, columns[self.table.key], list(columns))
 
             if not self.table.insert_record(record):
+                return False
+
+            if len(self.table.index.indices) < self.table.num_columns:
                 return False
             
             #Put into index
             for column_index in range(self.table.num_columns):
+                if column_index >= len(self.table.index.indices) or self.table.index.indices[column_index] is None:
+                     continue
                 col_val = columns[column_index]
-                # Check if column is indexed
-                if self.table.index.indices[column_index] is not None:
+                if isinstance(self.table.index.indices[column_index], BTree):
                     self.table.index.indices[column_index].insert(col_val, rid)
-            
+
+            print(f"✅ Inserted record {rid}")
             return True
         
         except Exception as e:
@@ -136,7 +144,7 @@ class Query:
             # Assume that len(projected_columns_index) equals the number of columns in record.values.
             for i, flag in enumerate(projected_columns_index):
                 if flag == 1:
-                    projected_values.append(record.values[i])
+                    projected_values.append(record.columns[i])
             new_record = Record(projected_values)
             result.append(new_record)
     
@@ -154,14 +162,12 @@ class Query:
     # Assume that select will never be called on a key that doesn't exist
     """
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
-        
         # We can use relative_version to indicate how many tail records we need to traverse
         # We can do version == 0: return base record, version == 1: return first tail record; version == 2 return second tail record, etc
-        
+
         result = []
-        
+
         rids = self.table.lookup_by_value(search_key, search_key_index)
-        
         for rid in rids:
             current_record = self.table.get_record_by_rid(rid)
             if current_record is None:

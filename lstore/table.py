@@ -58,24 +58,41 @@ class Table:
 
     def insert_record(self, record):
         page_range = self.get_page_range(self.current_rid)
-        if page_range is None or not page_range.is_base or not page_range.has_capacity():
+        if page_range is None or not page_range.is_base or not all(page_list[-1].has_capacity() for page_list in page_range.pages):
             page_range = self.create_page_range(is_base=True)
-        if page_range.add_record(record):
-            self.page_directory[record.rid] = page_range
+        success = page_range.add_record(self, self.current_rid, record)
+
+        if success:
             self.current_rid += 1
             return True
         return False
 
     def update_record(self, rid, updated_columns):
-        record = self.page_directory[rid]
-        page_range = self.get_page_range(self.current_rid)
-        if page_range is None or page_range.is_base:
-            page_range = self.create_page_range(is_base=False)
-        new_tail_record = Record(self.current_rid, record.key, updated_columns)
-        if page_range.add_tail_record(new_tail_record):
-            record.indirection = new_tail_record.rid
-            record.schema_encoding = self.update_schema_encoding(record.schema_encoding, updated_columns)
-            self.page_directory[new_tail_record.rid] = page_range
+
+        tail_page_range = self.get_page_range(self.current_rid)
+        if tail_page_range is None or tail_page_range.is_base:
+            tail_page_range = self.create_page_range(is_base=False)
+
+        base_record = self.get_record_by_rid(rid)
+
+        while base_record.columns[1] not in (None, -1) and base_record.columns[1] != rid:
+            base_record = self.get_record_by_rid(base_record.columns[1])
+
+        if base_record is None:
+            return False
+        if base_record.columns[1] not in (None, -1):
+            base_record = self.get_record_by_rid(base_record.columns[1])
+        new_tail_rid = self.current_rid
+        new_tail_values = base_record.columns.copy()
+
+        for i, column_value in enumerate(updated_columns):
+            if column_value is not None:
+                new_tail_values[i] = column_value
+
+        new_tail_record = Record(new_tail_rid, base_record.key, new_tail_values)
+        if tail_page_range.add_tail_record(new_tail_record):
+            self.page_directory[rid].get_record(rid).columns[1] = new_tail_rid
+            self.page_directory[new_tail_rid] = tail_page_range
             self.current_rid += 1
             return True
         return False
@@ -98,7 +115,7 @@ class Table:
             
             # We can assume that all columns in a base page range will have the same num_records so 
             # we will use the first column to find how many records are stored
-            num_records = page_range.pages[0].num_records
+            num_records = page_range.pages[0][0].num_records
             
             # Computes RID and checks value
             for offset in range(num_records):
@@ -123,7 +140,7 @@ class Table:
         return page_range.get_record(rid)
     
     def get_latest_record(self, rid):
-        
+
         base_record = self.get_record_by_rid(rid)
         if base_record is None:
             return None
@@ -133,9 +150,19 @@ class Table:
             return base_record
 
         latest_record = base_record
+        visited_rids = set()
+
         # While the current record has a valid indirection pointer, get its tail record
         while latest_record.columns[1] not in (None, -1):
             tail_rid = latest_record.columns[1]
+
+            # Detect infinite loop
+            if tail_rid in visited_rids or tail_rid == rid:
+                print(f"Infinite loop: RID {tail_rid} is repeating.")
+                base_record.columns[1] = -1
+                break
+            visited_rids.add(tail_rid)
+
             tail_record = self.get_record_by_rid(tail_rid)
             if tail_record is None:
                 break
