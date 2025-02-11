@@ -51,7 +51,14 @@ class Query:
             #Set base page RID to -1
             base_record.columns[0] = -1  
 
-            #Most likely will need to remove the data from the index; need to figure out how to call
+            # Removing records from the index
+            rid = base_record.rid
+            for column_index in range(self.table.num_columns):
+                col_val = base_record[column_index]
+                # Check if column is indexed
+                if self.table.index.indices[column_index] is not None:
+                    self.table.index.indices[column_index].delete(col_val, rid)
+
             return True
         
         except Exception as e:
@@ -83,14 +90,18 @@ class Query:
             indirection = rid
 
             #Need to make a record using insert_record from table.py, unsure how to format a record 
-            all_columns = [rid, indirection, schema_encoding, columns]
+            all_columns = [rid, indirection, schema_encoding, columns] + list(columns)
             record = Record(rid, key_column, all_columns)
 
             if not self.table.insert_record(record):
                 return False
             
             #Put into index
-            #Call the B-tree insert
+            for column_index in range(self.table.num_columns):
+                col_val = columns[column_index]
+                # Check if column is indexed
+                if self.table.index.indices[column_index] is not None:
+                    self.table.index.indices[column_index].insert(col_val, rid)
             
             return True
         
