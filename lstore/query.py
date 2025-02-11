@@ -154,7 +154,43 @@ class Query:
     # Assume that select will never be called on a key that doesn't exist
     """
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
-        pass
+        
+        # We can use relative_version to indicate how many tail records we need to traverse
+        # We can do version == 0: return base record, version == 1: return first tail record; version == 2 return second tail record, etc
+        
+        result = []
+        
+        rids = self.table.lookup_by_value(search_key, search_key_index)
+        
+        for rid in rids:
+            current_record = self.table.get_record_by_rid(rid)
+            if current_record is None:
+                continue
+
+            # Traverse the tail chain 'version' times
+            for _ in range(relative_version):
+                # Check if there is an update
+                if current_record.columns[1] in (None, -1):
+                    # If no update, break loop
+                    break
+                tail_rid = current_record.columns[1]
+                tail_record = self.table.get_record_by_rid(tail_rid)
+                if tail_record is None:
+                    break
+                current_record = tail_record
+            
+            # Check if 'locked'
+            if hasattr(current_record, "locked") and current_record.locked:
+                return False
+            
+            # Apply projection to select the only needed columns from record
+            projected_cols = [col_value for flag, col_value in zip(projected_columns_index, current_record.columns) if flag == 1]
+            
+            # Construct a new Record object with the same rid and key but only the projected columns
+            projected_record = Record(current_record.rid, current_record.key, projected_cols)
+            result.append(projected_record)
+        
+        return result
 
     
     """
