@@ -55,17 +55,19 @@ class Table:
             if page_range.start_rid <= rid <= page_range.end_rid:
                 return page_range
         return None
+    
+    def get_next_rid(self):
+        next_rid = self.current_rid
+        self.current_rid += 1
+        return next_rid
 
     def insert_record(self, record):
-        page_range = self.get_page_range(self.current_rid)
+        page_range = self.get_page_range(record.rid)
         if page_range is None or not page_range.is_base or not all(page_list[-1].has_capacity() for page_list in page_range.pages):
             page_range = self.create_page_range(is_base=True)
-        success = page_range.add_record(self, self.current_rid, record)
-
-        if success:
-            self.current_rid += 1
-            return True
-        return False
+        
+        success = page_range.add_record(self, record.rid, record)
+        return success
 
     def update_record(self, rid, updated_columns):
 

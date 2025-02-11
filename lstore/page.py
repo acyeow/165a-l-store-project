@@ -102,6 +102,7 @@ class PageRange:
         offset = rid - self.start_rid
         record_columns = []
         num_columns = self.num_columns
+        value = None
 
         for i in range(num_columns):
             # if self.pages[i] have been converted to a list

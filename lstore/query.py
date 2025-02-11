@@ -89,12 +89,16 @@ class Query:
             #Initially all 0's
             schema_encoding = 0
             #Get RID from table
-            rid = self.table.current_rid
+            rid = self.table.get_next_rid()
             indirection = rid
 
             #Need to make a record using insert_record from table.py, unsure how to format a record
-            record_metadata = [rid, indirection, schema_encoding]
-            record = Record(rid, columns[self.table.key], list(columns))
+            metadata = [rid, indirection, schema_encoding]
+            data = list(columns)
+            all_columns = metadata + data
+            record = Record(rid, columns[self.table.key], all_columns)
+
+            print(f"Debug - New Record: RID={record.rid}, Key={record.key}, Columns={record.columns}")
 
             if not self.table.insert_record(record):
                 return False
