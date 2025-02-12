@@ -106,31 +106,7 @@ class Table:
         return schema_encoding
     
     def lookup_by_value(self, search_key, search_key_index):
-  
-        rids = []
-        
-        # Iterate over each PageRange
-        for page_range in self.page_ranges:
-            # Only considers base records
-            if not page_range.is_base:
-                continue
-            
-            # We can assume that all columns in a base page range will have the same num_records so 
-            # we will use the first column to find how many records are stored
-            num_records = page_range.pages[0][0].num_records
-            
-            # Computes RID and checks value
-            for offset in range(num_records):
-                rid = page_range.start_rid + offset
-                # Get latest
-                record = self.get_latest_record(rid)
-                if record is None:
-                    continue
-                # Compare the record's value at the search_key_index with the search_key
-                if record.columns[search_key_index] == search_key:
-                    rids.append(rid)
-        
-        return rids
+        return self.index.locate(search_key_index, search_key)
     
     def get_record_by_rid(self, rid):
         

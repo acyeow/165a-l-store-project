@@ -98,7 +98,7 @@ class Query:
             metadata = [indirection, rid, timestamp, schema_encoding]
             data = list(columns)
             all_columns = metadata + data
-            record = Record(rid, columns[self.table.key], all_columns)
+            record = Record(rid, columns[self.table.key], all_columns)  
 
             if not self.table.insert_record(record):
                 return False

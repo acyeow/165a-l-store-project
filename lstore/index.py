@@ -5,154 +5,154 @@ A data strucutre holding indices for various columns of a table. Key column shou
 # B-Tree Implementation for indexing
 # Node structure: leaf status, keys, rids, and children
 class BTreeNode:
-	def __init__(self, leaf = False):
-		self.leaf = leaf
-		self.keys = []
-		self.rids = []
-		self.children = []
+    def __init__(self, leaf = False):
+        self.leaf = leaf
+        self.keys = []
+        self.rids = []
+        self.children = []
 
 # B-Tree
 class BTree:
-	def __init__(self, t):
-		# Start with an empty node, root is the root node and t is the minimum degree of the tree
-		self.root = BTreeNode(True)
-		self.t = t
+    def __init__(self, t):
+        # Start with an empty node, root is the root node and t is the minimum degree of the tree
+        self.root = BTreeNode(True)
+        self.t = t
 
-	# Search operation
-	def search(self, node, key):
-		i = 0
+    # Search operation
+    def search(self, node, key):
+        i = 0
 
-		# Search keys until the key is found
-		while (i < len(node.keys)) and (node.keys[i] < key):
-			i += 1
+        # Search keys until the key is found
+        while (i < len(node.keys)) and (node.keys[i] < key):
+            i += 1
 
-		# return the node if the key matches
-		if (i < len(node.keys)) and (node.keys[i] == key):
-			return node.rids[i]
+        # return the node if the key matches
+        if (i < len(node.keys)) and (node.keys[i] == key):
+            return node.rids[i]
 
-		# If the key does not exist and the node is a leaf, the return none
-		if node.leaf:
-			return None
+        # If the key does not exist and the node is a leaf, the return none
+        if node.leaf:
+            return None
 
-		# keep searching deeper if the node isn't found
-		return self.search(node.children[i], key)
+        # keep searching deeper if the node isn't found
+        return self.search(node.children[i], key)
 
-	# Traverse operation
-	def traverse(self, node, begin = None, end = None, result = None):
-		if result is None:
-			result = []
+    # Traverse operation
+    def traverse(self, node, begin = None, end = None, result = None):
+        if result is None:
+            result = []
 
-		# if the node does not exist, then return the root
-		if node is None:
-			return result
+        # if the node does not exist, then return the root
+        if node is None:
+            return result
 
         # traverse through the nodes from left to right
-		for i in range(len(node.keys)):
-			if not node.leaf:
-				self.traverse(node.children[i], begin, end, result)
+        for i in range(len(node.keys)):
+            if not node.leaf:
+                self.traverse(node.children[i], begin, end, result)
 
-			if (begin is None or node.keys[i] >= begin) and (end is None or node.keys[i] <= end):
-				result.append(node.rids[i])
+            if (begin is None or node.keys[i] >= begin) and (end is None or node.keys[i] <= end):
+                result.append(node.rids[i])
 
-		if not node.leaf:
-			self.traverse(node.children[-1], begin, end, result)
-		return result
+        if not node.leaf:
+            self.traverse(node.children[-1], begin, end, result)
+        return result
 
-	# Insertion operation
-	def insert(self, key, rid):
-		# check the node to insert into and split it if full
-		root = self.root
+    # Insertion operation
+    def insert(self, key, rid):
+        # check the node to insert into and split it if full
+        root = self.root
 
-		if len(root.keys) == (self.t * 2) - 1:
-			new = BTreeNode(False)
-			new.children.append(root)
-			self.split(new, 0, root)
-			self.root = new
+        if len(root.keys) == (self.t * 2) - 1:
+            new = BTreeNode(False)
+            new.children.append(root)
+            self.split(new, 0, root)
+            self.root = new
 
-		# insert non full
-		self.insert_non_full(self.root, key, rid)
+        # insert non full
+        self.insert_non_full(self.root, key, rid)
 
 
-	# Insertion operation for non-full nodes
-	def insert_non_full(self, node, key, rid):
-		i = len(node.keys) - 1
+    # Insertion operation for non-full nodes
+    def insert_non_full(self, node, key, rid):
+        i = len(node.keys) - 1
 
-		if node.leaf:
-			while i >= 0 and key < node.keys[i]:
-				i -= 1
-			i += 1
+        if node.leaf:
+            while i >= 0 and key < node.keys[i]:
+                i -= 1
+            i += 1
 
-			# Put rid in the same location as the key in parallel
-			if i < len(node.keys) and node.keys[i] == key:
-				node.rids[i] = rid
-			else:
-				node.keys.insert(i, key)
-				node.rids.insert(i, rid)
+            # Put rid in the same location as the key in parallel
+            if i < len(node.keys) and node.keys[i] == key:
+                node.rids[i] = rid
+            else:
+                node.keys.insert(i, key)
+                node.rids.insert(i, rid)
 
-		else:
-			while i >= 0 and key < node.keys[i]:
-				i -= 1
-			i += 1
+        else:
+            while i >= 0 and key < node.keys[i]:
+                i -= 1
+            i += 1
 
-			if len(node.children[i].keys) == (2 * self.t) - 1:
-				self.split(node, i, node.children[i])
-				if key > node.keys[i]:
-					i += 1
+            if len(node.children[i].keys) == (2 * self.t) - 1:
+                self.split(node, i, node.children[i])
+                if key > node.keys[i]:
+                    i += 1
 
-			self.insert_non_full(node.children[i], key, rid)
+            self.insert_non_full(node.children[i], key, rid)
 
-	# Split function for splitting full nodes
-	def split(self, parent, i, child):
-		# split the keys from the middle
-		t = self.t
-		new = BTreeNode(child.leaf)
-		parent.keys.insert(i, child.keys[t - 1])
-		parent.children.insert(i + 1, new)
-		new.keys = child.keys[t:(2 * t) - 1]
-		new.rids = child.rids[t:(2 * t) - 1]
-		child.keys = child.keys[0:t - 1]
-		child.rids = child.rids[0:t - 1]
+    # Split function for splitting full nodes
+    def split(self, parent, i, child):
+        # split the keys from the middle
+        t = self.t
+        new = BTreeNode(child.leaf)
+        parent.keys.insert(i, child.keys[t - 1])
+        parent.children.insert(i + 1, new)
+        new.keys = child.keys[t:(2 * t) - 1]
+        new.rids = child.rids[t:(2 * t) - 1]
+        child.keys = child.keys[0:t - 1]
+        child.rids = child.rids[0:t - 1]
 
-		if not child.leaf:
-			new.children = child.children[t:(2 * t)]
-			child.children = child.children[0:t]
+        if not child.leaf:
+            new.children = child.children[t:(2 * t)]
+            child.children = child.children[0:t]
 
-	# Deletion operation
-	def delete(self, key):
-		if not self.root:
-			return
+    # Deletion operation
+    def delete(self, key):
+        if not self.root:
+            return
 
-		self.delete_internal(self.root, key)
+        self.delete_internal(self.root, key)
 
-		if not self.root.keys and not self.root.leaf:
-			self.root = self.root.children[0]
+        if not self.root.keys and not self.root.leaf:
+            self.root = self.root.children[0]
 
-	# Helper function for deletion operation
-	def delete_internal(self, node, key):
-		i = 0
+    # Helper function for deletion operation
+    def delete_internal(self, node, key):
+        i = 0
 
-		while i < len(node.keys) and key > node.keys[i]:
-			i += 1
+        while i < len(node.keys) and key > node.keys[i]:
+            i += 1
 
-		if i < len(node.keys) and node.keys[i] == key:
-			if node.leaf:
-				node.keys.pop(i)
-				node.rids.pop(i)
+        if i < len(node.keys) and node.keys[i] == key:
+            if node.leaf:
+                node.keys.pop(i)
+                node.rids.pop(i)
 
-			else:
-				node.keys[i] = self.get_predecessor(node.children[i])
-				self.delete_internal(node.children[i], node.keys[i])
+            else:
+                node.keys[i] = self.get_predecessor(node.children[i])
+                self.delete_internal(node.children[i], node.keys[i])
 
-		elif not node.leaf:
-			self.delete_internal(node.children[i], key)
+        elif not node.leaf:
+            self.delete_internal(node.children[i], key)
 
-	# Operation for getting predecessor node
-	def get_predecessor(self, node):
-		node = node.children[-1]
-		while not node.leaf:
-			node = node.children[-1]
+    # Operation for getting predecessor node
+    def get_predecessor(self, node):
+        node = node.children[-1]
+        while not node.leaf:
+            node = node.children[-1]
 
-		return node.rids[-1]
+        return node.rids[-1]
 
 class Index:
 
@@ -171,7 +171,8 @@ class Index:
         if column >= len(self.indices) or self.indices[column] is None:
             return []
         # Return the list of RIDs for the given value in the column, empty list if value not found
-        return self.indices[column].search(self.indices[column].root, value)
+        rid = self.indices[column].search(self.indices[column].root, value)
+        return [rid] if rid is not None else []
 
     """
     # Returns the RIDs of all records with values in column "column" between "begin" and "end"
@@ -211,5 +212,5 @@ class Index:
 
     # Delete a value from the index
     def delete(self, column, value):
-	    if column < len(self.indices) and self.indices[column] is not None:
-		     self.indices[column].delete(value)
+        if column < len(self.indices) and self.indices[column] is not None:
+             self.indices[column].delete(value)
