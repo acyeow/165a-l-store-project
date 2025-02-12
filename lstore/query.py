@@ -17,11 +17,13 @@ class Query:
     # Return False if record doesn't exist or is locked due to 2PL
     """
     def delete(self, primary_key):
+        # Get the RID of the record
         primary_key_column = 0 
         rid = self.table.index.locate(primary_key_column, primary_key)
         if not rid:
             return False
-        rid = rid[0]  # Assuming locate returns a list of RIDs
+        rid = rid[0]
+        # Set the record to empty
         self.table.page_ranges[rid[0]].base_pages[rid[1]].indirection[rid[2]] = ["empty"]
         return True
 
@@ -31,9 +33,15 @@ class Query:
     # Returns False if insert fails for whatever reason
     """
     def insert(self, *columns):
+        # Get the current time
         start_time = datetime.now().strftime("%Y%m%d%H%M%S")
-        schema_encoding = '0' * self.table.num_columns  # Add '0000...' for schema_encoding
-        self.table.insert_record(start_time, schema_encoding, *columns)  # Call function in Table.py to insert record
+        
+        # Initialize the schema encoding to all 0s
+        schema_encoding = '0' * self.table.num_columns  
+        
+        # Insert the record
+        self.table.insert_record(start_time, schema_encoding, *columns)
+        
         return True
 
     """
@@ -46,12 +54,18 @@ class Query:
     # Assume that select will never be called on a key that doesn't exist
     """
     def select(self, search_key, search_key_index, projected_columns_index):
+        # Get the RID of the record
         rid = self.table.index.locate(search_key_index, search_key)
         if not rid:
             return []
         rid = rid[0]
+        
+        # Get the record
         rid = self.table.page_ranges[rid[0]].base_pages[rid[1]].indirection[rid[2]]
+        
+        # Use the index to finc the record
         record = self.table.find_record(search_key, rid, projected_columns_index)
+        
         return [record]
 
     """
@@ -65,12 +79,19 @@ class Query:
     # Assume that select will never be called on a key that doesn't exist
     """
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
+        # Get the RID of the record
         rid = self.table.index.locate(search_key_index, search_key)
         if not rid:
             return []
         rid = rid[0]
+        
+        # Save the base RID
         base_rid = rid
+        
+        # Get the record
         rid = self.table.page_ranges[rid[0]].base_pages[rid[1]].indirection[rid[2]] 
+        
+        # Navigate to the desired version
         while relative_version < 0:
             if rid[3] == 'b':
                 if rid != base_rid:
@@ -78,7 +99,10 @@ class Query:
             else:
                 rid = self.table.page_ranges[rid[0]].tail_pages[rid[1]].indirection[rid[2]]
             relative_version += 1
+            
+        # Use the index to find the record
         record = self.table.find_record(search_key, rid, projected_columns_index)
+        
         return [record]
 
     """
@@ -87,28 +111,39 @@ class Query:
     # Returns False if no records exist with given key or if the target record cannot be accessed due to 2PL locking
     """
     def update(self, primary_key, *columns):
+        # Get the RID of the record
         rid = self.table.index.locate(self.table.key, primary_key)
         if not rid:
             return False
         rid = rid[0]
+        
+        # Unpack the RID data
         page_range_index, page_index, record_index, _ = rid
+        
+        # Get the current record
         current_rid = self.table.page_ranges[page_range_index].base_pages[page_index].indirection[record_index]
+        
+        # Find the record
         record = self.table.find_record(primary_key, current_rid, [1] * self.table.num_columns)
         
+        # Check that we have space in the tail page
         page_range = self.table.page_ranges[page_range_index]
         if not page_range.tail_pages or not page_range.tail_pages[-1].has_capacity():
             page_range.add_tail_page(self.table.num_columns)
         
+        # Insert the new record in the tail page
         current_tp = page_range.num_tail_pages - 1
         tail_page = page_range.tail_pages[current_tp]
         tail_page.insert_tail_page_record(*columns, record=record)
         tail_page.indirection.append(rid)
         
+        # Update the base page indirection
         new_record_index = tail_page.num_records - 1
         update_rid = (page_range_index, current_tp, new_record_index, 't')
         tail_page.rid.append(update_rid)
         page_range.base_pages[page_index].indirection[record_index] = update_rid
         
+        # Update the schema encoding
         for i in range(self.table.num_columns):
             if tail_page.schema_encoding[new_record_index][i] == 1:
                 page_range.base_pages[page_index].schema_encoding[record_index][i] = 1
@@ -129,7 +164,6 @@ class Query:
         if not rids:
             return False
 
-        
         total_sum = 0
         processed_keys = set()
         collected_values = []  # Store (key, value) pairs for debugging

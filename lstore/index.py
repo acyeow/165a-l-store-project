@@ -158,8 +158,10 @@ class Index:
     # Returns the RIDs of all records with values in column "column" between "begin" and "end"
     """
     def locate_range(self, begin, end, column):
+        # If column is out of range or no index exists for the column, return empty list
         if column >= len(self.indices) or self.indices[column] is None:
             return []
+        # Return the list of RIDs for the given range in the column, empty list if no records found
         return self.indices[column].traverse(self.indices[column].root, begin, end)
         
 
@@ -167,9 +169,6 @@ class Index:
     # optional: Create index on specific column
     """
     def create_index(self, column_number):
-        # If column is out of range, do nothing
-        # if column_number >= len(self.indices):
-        #     return
         # Create a B-Tree
         self.indices[column_number] = BTree(self.t)
         # Create index for the column
@@ -178,8 +177,10 @@ class Index:
             self.indices[column_number].insert((value, rid))
 
     def insert(self, key, rid):
+        # If index for the column does not exist, create one
         if self.indices[0] is None:
             self.create_index(0)
+        # Insert the key and RID into the index using the B-Tree
         self.indices[0].insert((key, rid))
 
     """
