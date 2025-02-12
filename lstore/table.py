@@ -106,7 +106,8 @@ class Table:
         return schema_encoding
     
     def lookup_by_value(self, search_key, search_key_index):
-        return self.index.locate(self.key if search_key_index == self.key else search_key_index, search_key)
+        stored_index = search_key_index + 4 if search_key_index < self.num_columns else search_key_index
+        return self.index.locate(stored_index, search_key)
     
     def get_record_by_rid(self, rid):
         
@@ -114,8 +115,13 @@ class Table:
         page_range = self.page_directory.get(rid, None)
         if page_range is None:
             return None
-        
-        return page_range.get_record(rid)
+
+        record = page_range.get_record(rid)
+        if record is not None and len(record.columns) < self.num_columns + 4:
+            print(f"ERROR: Record {rid} has only {len(record.columns)} columns, expected {self.num_columns + 4}")
+            return None
+
+        return record
     
     def get_latest_record(self, rid):
 

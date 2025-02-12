@@ -103,10 +103,10 @@ class PageRange:
         # Basically the current record's position
         offset = rid - self.start_rid
         record_columns = []
-        num_columns = self.num_columns
+        total_columns = self.num_columns + 4
         value = None
 
-        for i in range(num_columns):
+        for i in range(total_columns):
             # if self.pages[i] have been converted to a list
             if self.is_base:
                 if len(self.pages[i]) > 0:
@@ -140,5 +140,8 @@ class PageRange:
                     index -= page.num_records
             record_columns.append(value)
 
+        if len(record_columns) != total_columns:
+            print(f"ERROR: RID {rid} expected {total_columns} columns but found {len(record_columns)}")
+            return None
         # Record constructor needs key but since PageRange does not store the key, we can just pass None for now
         return Record(rid, None, record_columns)

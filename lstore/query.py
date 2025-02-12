@@ -1,7 +1,6 @@
-from lstore.table import Table, Record
+from lstore.table import Table, Record, INDIRECTION_COLUMN, RID_COLUMN, TIMESTAMP_COLUMN, SCHEMA_ENCODING_COLUMN
 from lstore.index import Index, BTreeNode, BTree
 from time import process_time
-
 
 class Query:
     """
@@ -25,40 +24,59 @@ class Query:
     def delete(self, primary_key):
         try:
             #This is if the the record doesn't exist; unsure what is 2PL
-            existing_records = self.select(primary_key, self.table.key, [1]*self.table.num_columns)
+            existing_records = self.select(primary_key, self.table.key, [1, 1, 1, 1] + [1]*self.table.num_columns)
             if not existing_records:
+                print(f"Delete failed: No record found for key {primary_key}.")
                 return False
 
-            #If the record exists, get the RID
+            #If the record exists, 
             base_record = existing_records[0]
-            current_rid = base_record.rid
-            #Latest Tail Page
-            current_indirection = base_record.columns[1]
+            current_record = base_record
 
-            #If the base page isn't the latest version
-            if current_indirection != current_rid:
-                #Traverse the tail pages (Most recent to oldest)
-                while current_indirection != base_record.rid:
+            if base_record is None or len(base_record.columns) < self.table.num_columns + 4:
+                print(f"Delete failed: Base record for key {primary_key} is invalid.")
+                return False
 
-                    #Get tail record
-                    tail_record = self.get_record_by_rid(current_indirection)
-                    #Set RID to -1
-                    tail_record.columns[1] = -1
-                    #Move to next tail via indirection column
-                    current_indirection = tail_record.columns[0]
+            if len(base_record.columns) < self.table.num_columns + 4:
+                print(f"Delete failed: Base record for key {primary_key} is missing columns. Found {len(base_record.columns)}, expected {self.table.num_columns + 4}.")
+                return False
 
-                    pass
+            print(f"Deleting record with primary key {primary_key} (RID {base_record.rid})")
+
+            while (len(current_record.columns) > INDIRECTION_COLUMN and current_record.columns[INDIRECTION_COLUMN] not in (None, -1)):
+                tail_rid = current_record.columns[INDIRECTION_COLUMN]
+
+                if tail_rid is None or not isinstance(tail_rid, int):
+                    print(f"Delete failed: Tail RID {tail_rid} is invalid.")
+                    break
+
+                tail_record = self.table.get_record_by_rid(tail_rid)
+
+
+                if tail_record is None or len(tail_record.columns) < self.table.num_columns + 4:
+                    print(f"Delete failed: Tail record {tail_rid} is invalid.")
+                    break
+
+                tail_record.columns[RID_COLUMN] = -1
+                tail_record.columns[INDIRECTION_COLUMN] = -1
+                current_record = tail_record
             
             #Set base page RID to -1
-            base_record.columns[0] = -1  
+            if len(base_record.columns) > RID_COLUMN:
+                base_record.columns[RID_COLUMN] = -1
+            if len(base_record.columns) > INDIRECTION_COLUMN:
+                base_record.columns[INDIRECTION_COLUMN] = -1
+
+            print(f"Base record (RID {base_record.rid}) deleted successfully.")
 
             # Removing records from the index
             rid = base_record.rid
             for column_index in range(self.table.num_columns):
-                col_val = base_record[column_index]
-                # Check if column is indexed
-                if self.table.index.indices[column_index] is not None:
-                    self.table.index.indices[column_index].delete(col_val, rid)
+                if column_index < len(base_record.columns):
+                    col_val = base_record.columns[column_index]
+                    # Check if column is indexed
+                    if col_val is not None and self.table.index.indices[column_index] is not None:
+                        self.table.index.indices[column_index].delete(col_val)
 
             return True
         
@@ -91,14 +109,14 @@ class Query:
             schema_encoding = 0
             #Get RID from table
             rid = self.table.get_next_rid()
-            indirection = rid
+            indirection = -1
             timestamp = int(process_time())
 
             #Need to make a record using insert_record from table.py, unsure how to format a record
             metadata = [indirection, rid, timestamp, schema_encoding]
             data = list(columns)
             all_columns = metadata + data
-            record = Record(rid, columns[self.table.key], all_columns)  
+            record = Record(rid, columns[self.table.key], all_columns)
 
             if not self.table.insert_record(record):
                 return False
@@ -114,8 +132,7 @@ class Query:
                 if isinstance(self.table.index.indices[column_index], BTree):
                     self.table.index.indices[column_index].insert(col_val, rid)
 
-            if (rid % 100 == 0):
-                print(f"✅ Inserted record {rid}")
+            #print(f"✅ Inserted record {rid}")
             return True
         
         except Exception as e:
@@ -150,7 +167,7 @@ class Query:
             for i, flag in enumerate(projected_columns_index):
                 if flag == 1:
                     projected_values.append(record.columns[i])
-            new_record = Record(projected_values)
+            new_record = Record(record.rid, record.key, projected_values)
             result.append(new_record)
     
         return result
@@ -224,21 +241,9 @@ class Query:
             if len(updated_columns) != self.table.num_columns:
                 return False
 
-            #Attempt at implementing index functionality; Change values, but don't change RID
-            #Need to check to see if metadata is being changed accidentalily
-            for col_index, new_value in enumerate(updated_columns):
-                #Only update columns that are being changed
-                if new_value is not None:  
-                    #If this column has an index, replace the values
-                    if self.table.index.indices[col_index] is not None:
-                        old_value = base_record.columns[col_index]
-                        self.table.index.indices[col_index].delete(old_value)
-                        self.table.index.indices[col_index].insert(new_value, rid)
-
-            
-
             #Create tail page using the update_record function in table.py
-            #Think this may need to be adjusted; unsure if tailpage has different RID (ie BID vs TID)
+            #When a record is updated, update the index to point towards tail page instead?
+
             return self.table.update_record(rid, updated_columns)
         except Exception as e:
             print(f"Update failed: {e}")

@@ -202,8 +202,10 @@ class Index:
         self.indices[column_number] = BTree(self.t)
         # Create index for the column
         for rid, record in self.table.page_directory.items():
-            value = record.columns[column_number]
-            self.indices[column_number].insert(value, rid)
+            user_index = column_number + 4
+            if len(record.columns) > user_index:
+                value = record.columns[user_index]
+                self.indices[column_number].insert(value, rid)
     """
     # optional: Drop index of specific column
     """
