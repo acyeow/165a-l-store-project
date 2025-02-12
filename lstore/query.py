@@ -1,5 +1,6 @@
 from lstore.table import Table, Record
 from lstore.index import Index, BTreeNode, BTree
+from time import process_time
 
 
 class Query:
@@ -28,7 +29,7 @@ class Query:
             if not existing_records:
                 return False
 
-            #If the record exists, 
+            #If the record exists, get the RID
             base_record = existing_records[0]
             current_rid = base_record.rid
             #Latest Tail Page
@@ -40,11 +41,11 @@ class Query:
                 while current_indirection != base_record.rid:
 
                     #Get tail record
-                    #tail_record = 
+                    tail_record = self.get_record_by_rid(current_indirection)
                     #Set RID to -1
-                    #tail_record.columns[0] = -1
+                    tail_record.columns[1] = -1
                     #Move to next tail via indirection column
-                    #current_indirection = tail_record.columns[1]
+                    current_indirection = tail_record.columns[0]
 
                     pass
             
@@ -89,12 +90,15 @@ class Query:
             #Initially all 0's
             schema_encoding = 0
             #Get RID from table
-            rid = self.table.current_rid
+            rid = self.table.get_next_rid()
             indirection = rid
+            timestamp = int(process_time())
 
             #Need to make a record using insert_record from table.py, unsure how to format a record
-            record_metadata = [rid, indirection, schema_encoding]
-            record = Record(rid, columns[self.table.key], list(columns))
+            metadata = [indirection, rid, timestamp, schema_encoding]
+            data = list(columns)
+            all_columns = metadata + data
+            record = Record(rid, columns[self.table.key], all_columns)  
 
             if not self.table.insert_record(record):
                 return False
@@ -110,7 +114,8 @@ class Query:
                 if isinstance(self.table.index.indices[column_index], BTree):
                     self.table.index.indices[column_index].insert(col_val, rid)
 
-            print(f"✅ Inserted record {rid}")
+            if (rid % 100 == 0):
+                print(f"✅ Inserted record {rid}")
             return True
         
         except Exception as e:
@@ -162,14 +167,12 @@ class Query:
     # Assume that select will never be called on a key that doesn't exist
     """
     def select_version(self, search_key, search_key_index, projected_columns_index, relative_version):
-
         # We can use relative_version to indicate how many tail records we need to traverse
         # We can do version == 0: return base record, version == 1: return first tail record; version == 2 return second tail record, etc
 
         result = []
 
         rids = self.table.lookup_by_value(search_key, search_key_index)
-
         for rid in rids:
             current_record = self.table.get_record_by_rid(rid)
             if current_record is None:
@@ -178,26 +181,26 @@ class Query:
             # Traverse the tail chain 'version' times
             for _ in range(relative_version):
                 # Check if there is an update
-                if current_record.columns[1] in (None, -1):
+                if current_record.columns[0] in (None, -1):
                     # If no update, break loop
                     break
-                tail_rid = current_record.columns[1]
+                tail_rid = current_record.columns[0]
                 tail_record = self.table.get_record_by_rid(tail_rid)
                 if tail_record is None:
                     break
                 current_record = tail_record
-
+            
             # Check if 'locked'
             if hasattr(current_record, "locked") and current_record.locked:
                 return False
-
+            
             # Apply projection to select the only needed columns from record
             projected_cols = [col_value for flag, col_value in zip(projected_columns_index, current_record.columns) if flag == 1]
-
+            
             # Construct a new Record object with the same rid and key but only the projected columns
             projected_record = Record(current_record.rid, current_record.key, projected_cols)
             result.append(projected_record)
-
+        
         return result
 
     
@@ -221,9 +224,21 @@ class Query:
             if len(updated_columns) != self.table.num_columns:
                 return False
 
-            #Create tail page using the update_record function in table.py
-            #When a record is updated, update the index to point towards tail page instead?
+            #Attempt at implementing index functionality; Change values, but don't change RID
+            #Need to check to see if metadata is being changed accidentalily
+            for col_index, new_value in enumerate(updated_columns):
+                #Only update columns that are being changed
+                if new_value is not None:  
+                    #If this column has an index, replace the values
+                    if self.table.index.indices[col_index] is not None:
+                        old_value = base_record.columns[col_index]
+                        self.table.index.indices[col_index].delete(old_value)
+                        self.table.index.indices[col_index].insert(new_value, rid)
 
+            
+
+            #Create tail page using the update_record function in table.py
+            #Think this may need to be adjusted; unsure if tailpage has different RID (ie BID vs TID)
             return self.table.update_record(rid, updated_columns)
         except Exception as e:
             print(f"Update failed: {e}")
