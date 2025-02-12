@@ -10,10 +10,10 @@ class Record:
     def __init__(self, rid, key, columns):
         self.rid = rid
         self.key = key
-        #Columns[0] = RID
-        #Columns[1] = Indirection
-        #Columns[2] = Schema Encoding
-        #Columns[3] = Data 
+        #Columns[0] = Indirection
+        #Columns[1] = RID
+        #Columns[2] = Timestamp
+        #Columns[3] = Schema Encoding
         self.columns = columns
 
 class PageRangeFinder:

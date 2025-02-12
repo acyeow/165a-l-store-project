@@ -57,13 +57,15 @@ class PageRange:
         self.end_rid = end_rid
         self.is_base = is_base
         self.num_columns = num_columns
+        #data + metadata
+        total_columns = num_columns + 4
 
 		# Each pagerange holds 16 base pages and tail pages are appended
         if is_base:
-            self.pages = [[BasePage()] for _ in range(num_columns)]
+            self.pages = [[BasePage()] for _ in range(total_columns)]
         else:
-            self.pages = [[TailPage()] for _ in range(num_columns)]
-            self.current_tail_page = [self.pages[i][-1] for _ in range(num_columns)]
+            self.pages = [[TailPage()] for _ in range(total_columns)]
+            self.current_tail_page = [self.pages[i][-1] for _ in range(total_columns)]
 
     def has_capacity(self):
         return all(page.has_capacity() for page in self.pages)

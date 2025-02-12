@@ -1,5 +1,6 @@
 from lstore.table import Table, Record
 from lstore.index import Index, BTreeNode, BTree
+from time import process_time
 
 
 class Query:
@@ -91,14 +92,13 @@ class Query:
             #Get RID from table
             rid = self.table.get_next_rid()
             indirection = rid
+            timestamp = int(process_time())
 
             #Need to make a record using insert_record from table.py, unsure how to format a record
-            metadata = [rid, indirection, schema_encoding]
+            metadata = [indirection, rid, timestamp, schema_encoding]
             data = list(columns)
             all_columns = metadata + data
             record = Record(rid, columns[self.table.key], all_columns)
-
-            print(f"Debug - New Record: RID={record.rid}, Key={record.key}, Columns={record.columns}")
 
             if not self.table.insert_record(record):
                 return False
@@ -114,7 +114,7 @@ class Query:
                 if isinstance(self.table.index.indices[column_index], BTree):
                     self.table.index.indices[column_index].insert(col_val, rid)
 
-            print(f"✅ Inserted record {rid}")
+            #print(f"✅ Inserted record {rid}")
             return True
         
         except Exception as e:
@@ -180,10 +180,10 @@ class Query:
             # Traverse the tail chain 'version' times
             for _ in range(relative_version):
                 # Check if there is an update
-                if current_record.columns[1] in (None, -1):
+                if current_record.columns[0] in (None, -1):
                     # If no update, break loop
                     break
-                tail_rid = current_record.columns[1]
+                tail_rid = current_record.columns[0]
                 tail_record = self.table.get_record_by_rid(tail_rid)
                 if tail_record is None:
                     break
