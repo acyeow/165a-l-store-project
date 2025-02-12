@@ -65,7 +65,7 @@ class PageRange:
             self.pages = [[BasePage()] for _ in range(total_columns)]
         else:
             self.pages = [[TailPage()] for _ in range(total_columns)]
-            self.current_tail_page = [self.pages[i][-1] for _ in range(total_columns)]
+            self.current_tail_page = [self.pages[i][-1] for i in range(total_columns)]
 
     def has_capacity(self):
         return all(page.has_capacity() for page in self.pages)

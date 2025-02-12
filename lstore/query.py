@@ -31,6 +31,7 @@ class Query:
 
             #If the record exists, 
             base_record = existing_records[0]
+
             current_record = base_record
 
             if base_record is None or len(base_record.columns) < self.table.num_columns + 4:
