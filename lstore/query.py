@@ -29,7 +29,7 @@ class Query:
             if not existing_records:
                 return False
 
-            #If the record exists, 
+            #If the record exists, get the RID
             base_record = existing_records[0]
             current_rid = base_record.rid
             #Latest Tail Page
@@ -41,11 +41,11 @@ class Query:
                 while current_indirection != base_record.rid:
 
                     #Get tail record
-                    #tail_record = 
+                    tail_record = self.get_record_by_rid(current_indirection)
                     #Set RID to -1
-                    #tail_record.columns[0] = -1
+                    tail_record.columns[1] = -1
                     #Move to next tail via indirection column
-                    #current_indirection = tail_record.columns[1]
+                    current_indirection = tail_record.columns[0]
 
                     pass
             
@@ -114,7 +114,8 @@ class Query:
                 if isinstance(self.table.index.indices[column_index], BTree):
                     self.table.index.indices[column_index].insert(col_val, rid)
 
-            #print(f"✅ Inserted record {rid}")
+            if (rid % 100 == 0):
+                print(f"✅ Inserted record {rid}")
             return True
         
         except Exception as e:
@@ -223,9 +224,21 @@ class Query:
             if len(updated_columns) != self.table.num_columns:
                 return False
 
-            #Create tail page using the update_record function in table.py
-            #When a record is updated, update the index to point towards tail page instead?
+            #Attempt at implementing index functionality; Change values, but don't change RID
+            #Need to check to see if metadata is being changed accidentalily
+            for col_index, new_value in enumerate(updated_columns):
+                #Only update columns that are being changed
+                if new_value is not None:  
+                    #If this column has an index, replace the values
+                    if self.table.index.indices[col_index] is not None:
+                        old_value = base_record.columns[col_index]
+                        self.table.index.indices[col_index].delete(old_value)
+                        self.table.index.indices[col_index].insert(new_value, rid)
 
+            
+
+            #Create tail page using the update_record function in table.py
+            #Think this may need to be adjusted; unsure if tailpage has different RID (ie BID vs TID)
             return self.table.update_record(rid, updated_columns)
         except Exception as e:
             print(f"Update failed: {e}")
