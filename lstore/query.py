@@ -38,14 +38,6 @@ class Query:
         self.table.insert_record(start_time, schema_encoding, *columns)  # Call function in Table.py to insert record
         return True
 
-    # For select, gives only desired columns
-    def modify_columns(self, record, projected_columns_index):
-        new_record = []
-        for i in range(len(record.columns)):
-            if projected_columns_index[i] == 1:
-                new_record.append(record.columns[i])
-        return new_record
-
     """
     # Read matching record with specified search key
     # :param search_key: the value you want to search based on
@@ -59,7 +51,7 @@ class Query:
         rid = self.table.index.locate(search_key_index, search_key)
         if not rid:
             return []
-        rid = rid[0]  # Assuming locate returns a list of RIDs
+        rid = rid[0]  
         rid = self.table.page_ranges[rid[0]].base_pages[rid[1]].indirection[rid[2]]
         record = self.table.find_record(search_key, rid, projected_columns_index)
         return [record]
@@ -78,9 +70,9 @@ class Query:
         rid = self.table.index.locate(search_key_index, search_key)
         if not rid:
             return []
-        rid = rid[0]  # Assuming locate returns a list of RIDs
+        rid = rid[0]  
         base_rid = rid
-        rid = self.table.page_ranges[rid[0]].base_pages[rid[1]].indirection[rid[2]]  # Converts base page rid to tail rid if any, else remains same
+        rid = self.table.page_ranges[rid[0]].base_pages[rid[1]].indirection[rid[2]] 
         while relative_version < 0:
             if rid[3] == 'b':
                 if rid != base_rid:
@@ -100,7 +92,7 @@ class Query:
         rid = self.table.index.locate(self.table.key, primary_key)
         if not rid:
             return False
-        rid = rid[0]  # Assuming locate returns a list of RIDs
+        rid = rid[0] 
         page_range_index, page_index, record_index, _ = rid
         current_rid = self.table.page_ranges[page_range_index].base_pages[page_index].indirection[record_index]
         record = self.table.find_record(primary_key, current_rid, [1] * self.table.num_columns)

@@ -26,14 +26,14 @@ class Table:
         self.page_directory = {}
         self.index = Index(self)
         self.page_ranges = []
-        self.add_page_range(num_columns)  # Initialize with the first page range
+        self.add_page_range(num_columns)
 
     def find_current_base_page(self):
         for page_range in self.page_ranges:
             for base_page in page_range.base_pages:
                 if base_page.has_capacity():
                     return page_range, base_page
-        # If no base page has capacity, add a new base page
+    
         if not self.page_ranges[-1].has_capacity():
             self.add_page_range(self.num_columns)
         self.page_ranges[-1].add_base_page(self.num_columns)
