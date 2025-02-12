@@ -150,7 +150,7 @@ class Query:
             for i, flag in enumerate(projected_columns_index):
                 if flag == 1:
                     projected_values.append(record.columns[i])
-            new_record = Record(projected_values)
+            new_record = Record(record.rid, record.key, projected_values)
             result.append(new_record)
     
         return result
