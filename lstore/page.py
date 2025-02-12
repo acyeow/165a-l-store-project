@@ -16,13 +16,13 @@ class Page:
         if self.has_capacity():
             # Check for string inputs and non-int inputs
             if isinstance(value, str):
-                value = int.from_bytes(value.encode('utf-8'), 'big')
+                value = int.from_bytes(value.encode('utf-8'), 'big', signed=True)
             elif not isinstance(value, int):
                 print(f"Unsupported data type: {type(value)}")
                 return False
 
             # Write the value to the page
-            self.data[self.num_records * 8: (self.num_records + 1) * 8] = value.to_bytes(8, 'big')
+            self.data[self.num_records * 8: (self.num_records + 1) * 8] = value.to_bytes(8, 'big', signed=True)
             # Increment the number of records in the page
             self.num_records += 1
             return True
@@ -32,7 +32,7 @@ class Page:
     def read(self, index):
         # If the index is within the number of records in the page, return the value at the index
         if index < self.num_records:
-            return int.from_bytes(self.data[index * 8:(index + 1) * 8], 'big')
+            return int.from_bytes(self.data[index * 8:(index + 1) * 8], 'big', signed=True)
         # If the index is out of range, return None
         return None
 

@@ -28,14 +28,19 @@ class BTree:
 
         # return the node if the key matches
         if (i < len(node.keys)) and (node.keys[i] == key):
-            return node.rids[i]
+            if 0 <= i < len(node.rids):
+                return node.rids[i]
+            return None
 
         # If the key does not exist and the node is a leaf, the return none
         if node.leaf:
             return None
 
         # keep searching deeper if the node isn't found
-        return self.search(node.children[i], key)
+        if i < len(node.children):
+            return self.search(node.children[i], key)
+
+        return None
 
     # Traverse operation
     def traverse(self, node, begin = None, end = None, result = None):

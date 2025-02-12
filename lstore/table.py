@@ -77,23 +77,23 @@ class Table:
 
         base_record = self.get_record_by_rid(rid)
 
-        while base_record.columns[1] not in (None, -1) and base_record.columns[1] != rid:
-            base_record = self.get_record_by_rid(base_record.columns[1])
+        while base_record.columns[INDIRECTION_COLUMN] not in (None, -1) and base_record.columns[INDIRECTION_COLUMN] != rid:
+            base_record = self.get_record_by_rid(base_record.columns[INDIRECTION_COLUMN])
 
         if base_record is None:
             return False
-        if base_record.columns[1] not in (None, -1):
-            base_record = self.get_record_by_rid(base_record.columns[1])
+        if base_record.columns[INDIRECTION_COLUMN] not in (None, -1):
+            base_record = self.get_record_by_rid(base_record.columns[INDIRECTION_COLUMN])
         new_tail_rid = self.current_rid
         new_tail_values = base_record.columns.copy()
 
-        for i, column_value in enumerate(updated_columns):
-            if column_value is not None:
-                new_tail_values[i] = column_value
+        for i in range(min(len(new_tail_values), len(updated_columns))):
+            if updated_columns[i] is not None:
+                new_tail_values[i] = updated_columns[i]
 
         new_tail_record = Record(new_tail_rid, base_record.key, new_tail_values)
         if tail_page_range.add_tail_record(new_tail_record):
-            self.page_directory[rid].get_record(rid).columns[1] = new_tail_rid
+            self.page_directory[rid].get_record(rid).columns[INDIRECTION_COLUMN] = new_tail_rid
             self.page_directory[new_tail_rid] = tail_page_range
             self.current_rid += 1
             return True
@@ -106,7 +106,7 @@ class Table:
         return schema_encoding
     
     def lookup_by_value(self, search_key, search_key_index):
-        return self.index.locate(search_key_index, search_key)
+        return self.index.locate(self.key if search_key_index == self.key else search_key_index, search_key)
     
     def get_record_by_rid(self, rid):
         
@@ -124,15 +124,15 @@ class Table:
             return None
 
         # If no update, its indirection pointer is assumed to be -1 or None
-        if base_record.columns[1] in (None, -1):
+        if base_record.columns[INDIRECTION_COLUMN] in (None, -1):
             return base_record
 
         latest_record = base_record
         visited_rids = set()
 
         # While the current record has a valid indirection pointer, get its tail record
-        while latest_record.columns[1] not in (None, -1):
-            tail_rid = latest_record.columns[1]
+        while latest_record.columns[INDIRECTION_COLUMN] not in (None, -1):
+            tail_rid = latest_record.columns[INDIRECTION_COLUMN]
 
             # Detect infinite loop
             if tail_rid in visited_rids or tail_rid == rid:
