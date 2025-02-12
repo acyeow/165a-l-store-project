@@ -41,7 +41,7 @@ class Query:
                 while current_indirection != base_record.rid:
 
                     #Get tail record
-                    tail_record = self.get_record_by_rid(current_indirection)
+                    tail_record = self.table.get_record_by_rid(current_indirection)
                     #Set RID to -1
                     tail_record.columns[1] = -1
                     #Move to next tail via indirection column
