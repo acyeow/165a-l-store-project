@@ -1,5 +1,3 @@
-from lstore.table import Table, Record
-from lstore.index import Index
 from datetime import datetime
 
 class Query:
@@ -51,7 +49,7 @@ class Query:
         rid = self.table.index.locate(search_key_index, search_key)
         if not rid:
             return []
-        rid = rid[0]  
+        rid = rid[0]
         rid = self.table.page_ranges[rid[0]].base_pages[rid[1]].indirection[rid[2]]
         record = self.table.find_record(search_key, rid, projected_columns_index)
         return [record]
@@ -70,7 +68,7 @@ class Query:
         rid = self.table.index.locate(search_key_index, search_key)
         if not rid:
             return []
-        rid = rid[0]  
+        rid = rid[0]
         base_rid = rid
         rid = self.table.page_ranges[rid[0]].base_pages[rid[1]].indirection[rid[2]] 
         while relative_version < 0:
@@ -92,7 +90,7 @@ class Query:
         rid = self.table.index.locate(self.table.key, primary_key)
         if not rid:
             return False
-        rid = rid[0] 
+        rid = rid[0]
         page_range_index, page_index, record_index, _ = rid
         current_rid = self.table.page_ranges[page_range_index].base_pages[page_index].indirection[record_index]
         record = self.table.find_record(primary_key, current_rid, [1] * self.table.num_columns)
@@ -126,19 +124,53 @@ class Query:
     # Returns False if no record exists in the given range
     """
     def sum(self, start_range, end_range, aggregate_column_index):
+        # Get RIDs in range
         rids = self.table.index.locate_range(start_range, end_range, self.table.key)
         if not rids:
             return False
 
+        
         total_sum = 0
+        processed_keys = set()
+        collected_values = []  # Store (key, value) pairs for debugging
+        
         for rid in rids:
-            while rid[3] != 'b':
-                rid = self.table.page_ranges[rid[0]].tail_pages[rid[1]].indirection[rid[2]]
-            record = self.table.find_record(rid[0], rid, [1] * self.table.num_columns)
-            total_sum += record.columns[aggregate_column_index]
-
-        return total_sum
+            # Get base record
+            base_page = self.table.page_ranges[rid[0]].base_pages[rid[1]]
             
+            # Read key
+            key_bytes = base_page.pages[self.table.key].data[rid[2]*8:(rid[2]+1)*8]
+            key_value = int.from_bytes(key_bytes, byteorder='big')
+            
+            if key_value < start_range or key_value > end_range:
+                continue
+                
+            if key_value in processed_keys:
+                continue
+                
+            processed_keys.add(key_value)
+            
+            # Get latest version through indirection
+            current_rid = base_page.indirection[rid[2]]
+            
+            try:
+                # Get value from appropriate page
+                if current_rid[3] == 't':  # Tail page
+                    page = self.table.page_ranges[current_rid[0]].tail_pages[current_rid[1]]
+                else:  # Base page
+                    page = base_page
+                
+                value_bytes = page.pages[aggregate_column_index].data[current_rid[2]*8:(current_rid[2]+1)*8]
+                value = int.from_bytes(value_bytes, byteorder='big')
+                
+                total_sum += value
+                collected_values.append((key_value, value))
+                
+            except Exception as e:
+                continue
+        
+        return total_sum
+                
     """
     :param start_range: int         # Start of the key range to aggregate 
     :param end_range: int           # End of the key range to aggregate 
@@ -156,23 +188,53 @@ class Query:
             return False
 
         total_sum = 0
+        processed_keys = set()
+        collected_values = []
+
         for rid in rids:
-            current_rid = self._get_relative_rid(rid, relative_version)
-            record = self.table.find_record(rid[0], current_rid, [1] * self.table.num_columns)
-            total_sum += record.columns[aggregate_column_index]
+            # Get base record
+            base_rid = rid
+            base_page = self.table.page_ranges[rid[0]].base_pages[rid[1]]
+            
+            # Read key
+            key_bytes = base_page.pages[self.table.key].data[rid[2]*8:(rid[2]+1)*8]
+            key_value = int.from_bytes(key_bytes, byteorder='big')
+            
+            if key_value < start_range or key_value > end_range or key_value in processed_keys:
+                continue
+                
+            processed_keys.add(key_value)
+            
+            # Navigate to desired version
+            current_rid = base_page.indirection[rid[2]]
+            version_count = relative_version
+            
+            while version_count < 0:
+                if current_rid[3] == 'b':  # Base record
+                    if current_rid != base_rid:  # Not original base
+                        current_rid = self.table.page_ranges[current_rid[0]].base_pages[current_rid[1]].indirection[current_rid[2]]
+                else:  # Tail record
+                    current_rid = self.table.page_ranges[current_rid[0]].tail_pages[current_rid[1]].indirection[current_rid[2]]
+                version_count += 1
 
+            # Read value
+            try:
+                if current_rid[3] == 't':
+                    page = self.table.page_ranges[current_rid[0]].tail_pages[current_rid[1]]
+                else:
+                    page = base_page
+                    
+                value_bytes = page.pages[aggregate_column_index].data[current_rid[2]*8:(current_rid[2]+1)*8]
+                value = int.from_bytes(value_bytes, byteorder='big')
+                
+                total_sum += value
+                collected_values.append((key_value, value))
+                
+            except Exception as e:
+                print(f"DEBUG: Error reading value: {e}")
+                continue
+        
         return total_sum
-
-    def _get_relative_rid(self, base_rid, relative_version):
-        current_rid = self.table.page_ranges[base_rid[0]].base_pages[base_rid[1]].indirection[base_rid[2]]
-        while relative_version < 0:
-            page_range = self.table.page_ranges[current_rid[0]]
-            if current_rid[3] == 'b' and current_rid != base_rid:
-                current_rid = page_range.base_pages[current_rid[1]].indirection[current_rid[2]]
-            else:
-                current_rid = page_range.tail_pages[current_rid[1]].indirection[current_rid[2]]
-            relative_version += 1
-        return current_rid
 
     """
     increments one column of the record
