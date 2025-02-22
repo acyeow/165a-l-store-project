@@ -116,6 +116,11 @@ class Query:
         if not rid:
             return False
         rid = rid[0]
+
+        # Check if the updated values lead to duplicate primary key, if so return False
+        if columns[self.table.key] is not None and columns[self.table.key] != primary_key:
+            if self.table.index.locate(self.table.key, columns[self.table.key]):
+                return False
         
         # Unpack the RID data
         page_range_index, page_index, record_index, _ = rid
