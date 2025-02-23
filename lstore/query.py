@@ -139,7 +139,10 @@ class Query:
         # Insert the new record in the tail page
         current_tp = page_range.num_tail_pages - 1
         tail_page = page_range.tail_pages[current_tp]
+        
+        start_time = datetime.now().strftime("%Y%m%d%H%M%S")
         tail_page.insert_tail_page_record(*columns, record=record)
+        tail_page.start_time.append(start_time)
         tail_page.indirection.append(rid)
         
         # Update the base page indirection
