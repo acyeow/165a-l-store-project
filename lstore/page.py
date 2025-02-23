@@ -1,144 +1,126 @@
-from lstore.table import Record, Table
+PAGE_SIZE = 4096
+DATA_SIZE = 8
+RECORDS_PER_PAGE = PAGE_SIZE // DATA_SIZE
 
-class Page:
-
+class LogicalPage:
     def __init__(self):
         self.num_records = 0
-        self.data = bytearray(4096)
+        self.data = bytearray(PAGE_SIZE)
 
     def has_capacity(self):
-        # Assuming each record is 8 bytes
-        max_records = 512
-        return self.num_records < max_records
+        return self.num_records < RECORDS_PER_PAGE
 
     def write(self, value):
-        # If there is space in the page, write the value
-        if self.has_capacity():
-            # Check for string inputs and non-int inputs
-            if isinstance(value, str):
-                value = int.from_bytes(value.encode('utf-8'), 'big', signed=True)
-            elif not isinstance(value, int):
-                print(f"Unsupported data type: {type(value)}")
-                return False
+        # Only handle 8-byte integers for milestone 1
+        if not isinstance(value, int):
+            raise ValueError("Value must be an integer")
+        if value.bit_length() > 64:
+            raise OverflowError("int too big to convert")
+        
+        # Convert the integer to a bytearray
+        value_bytes = value.to_bytes(8, byteorder='big')
+        
+        # Get the start and end index of the value in the data bytearray
+        start = self.num_records * 8
+        end = (self.num_records + 1) * 8
+        
+        # Write the value to the data bytearray
+        self.data[start:end] = value_bytes
+        self.num_records += 1
 
-            # Write the value to the page
-            self.data[self.num_records * 8: (self.num_records + 1) * 8] = value.to_bytes(8, 'big', signed=True)
-            # Increment the number of records in the page
-            self.num_records += 1
-            return True
-        # If there is no space in the page, return False
-        return False
-    
-    def read(self, index):
-        # If the index is within the number of records in the page, return the value at the index
-        if index < self.num_records:
-            return int.from_bytes(self.data[index * 8:(index + 1) * 8], 'big', signed=True)
-        # If the index is out of range, return None
-        return None
+    def read(self, index, num_values):
+        values = []
+        
+        # Read the values from the data bytearray and append them to the list
+        for i in range(num_values):
+            start = (index + i) * 8
+            end = (index + i + 1) * 8
+            value_bytes = self.data[start:end]
+            value = int.from_bytes(value_bytes, byteorder='big')
+            values.append(value)
+        return values
 
 # compressed, read-only pages
-class BasePage(Page):
-    def __init__(self):
-        super().__init__()
+class BasePage:
+    def __init__(self, num_cols):
+        # Initialize the page 
+        # Records are logically alligned
+        self.rid = [None] * RECORDS_PER_PAGE
+        self.num_cols = num_cols
+        self.num_records = 0
+        self.indirection = []
+        self.schema_encoding = []
+        self.start_time = []
+        self.pages = []
+        
+        # Initialize a LogicalPage for each column
+        for _ in range(self.num_cols):
+            self.pages.append(LogicalPage())
+    
+    def has_capacity(self):
+        # Check if the page has capacity for more records
+        return self.num_records < RECORDS_PER_PAGE
+    
+    def insert_base_page_record(self, rid, start_time, schema_encoding, indirection, *columns):
+        # Check if the page has capacity for more records
+        if not self.has_capacity():
+            return False
+        
+        # Write the record to the page
+        for i in range(self.num_cols):
+            self.pages[i].write(columns[i])
+
+        # Append the record information to the page
+        self.rid.append(rid)
+        self.start_time.append(start_time)
+        self.schema_encoding.append(schema_encoding)
+        self.indirection.append(indirection)
+        
+        # Increment the number of records in the page
+        self.num_records += 1
+        
+        # Return True to indicate that the record was successfully inserted
+        return True
+        
 
 # uncompressed, append-only updates
-class TailPage(Page):
-    def __init__(self):
-        super().__init__()
-  
-# upcompressed, append-only inserts      
-class TailLevelTailPage(Page):
-    def __init__(self):
-        super().__init__()
-
-class PageRange:
-    def __init__(self, start_rid, end_rid, num_columns, is_base=True):
-        self.start_rid = start_rid
-        self.end_rid = end_rid
-        self.is_base = is_base
-        self.num_columns = num_columns
-        #data + metadata
-        total_columns = num_columns + 4
-
-		# Each pagerange holds 16 base pages and tail pages are appended
-        if is_base:
-            self.pages = [[BasePage()] for _ in range(total_columns)]
-        else:
-            self.pages = [[TailPage()] for _ in range(total_columns)]
-            self.current_tail_page = [self.pages[i][-1] for i in range(total_columns)]
-
+class TailPage:
+    def __init__(self, num_cols):
+        # Initialize the page 
+        # Records are logically alligned
+        self.rid = [None] * RECORDS_PER_PAGE
+        self.num_cols = num_cols
+        self.num_records = 0
+        self.indirection = []
+        self.schema_encoding = []
+        self.pages = []
+        
+        # Initialize a LogicalPage for each column
+        for _ in range(self.num_cols):
+            self.pages.append(LogicalPage())
+    
     def has_capacity(self):
-        return all(page.has_capacity() for page in self.pages)
-
-    def add_record(self, table, rid, record):
-        if not self.is_base:
-            raise ValueError("Cannot add base record to tail page range")
-
-        for i, column_value in enumerate(record.columns):
-            if not isinstance(self.pages[i], list):
-                self.pages[i] = [self.pages[i]]
-
-            if not self.pages[i][-1].write(column_value):
-                # Create a new base page and assign it
-                new_page = BasePage()
-                self.pages[i].append(new_page)
-                new_page.write(column_value)
-
-            table.page_directory[rid] = self
-
-        return True
-
-    def add_tail_record(self, record):
-        if self.is_base:
-            raise ValueError("Cannot add tail record to base page range")
-        for i, column_value in enumerate(record.columns):
-            if column_value is not None:
-                if not self.current_tail_page[i].write(column_value):
-                    self.current_tail_page[i] = TailPage()
-                    self.pages[i].append(self.current_tail_page[i])
-                    self.current_tail_page[i].write(column_value)
-        return True
-
-    def get_record(self, rid):
-        # Basically the current record's position
-        offset = rid - self.start_rid
-        record_columns = []
-        num_columns = self.num_columns
-        value = None
-
-        for i in range(num_columns):
-            # if self.pages[i] have been converted to a list
-            if self.is_base:
-                if len(self.pages[i]) > 0:
-                    last_page = self.pages[i][-1]
-                    if 0 <= offset < last_page.num_records:
-                        value = last_page.read(offset)
-                # Base page range, one page per column
-
+        # Check if the page has capacity for more records
+        return self.num_records < RECORDS_PER_PAGE
+    
+    def insert_tail_page_record(self, *columns, record):
+        # Generate the schema by checking which columns are being updated
+        # Write the new data to the columns that are being updated
+        # Write the old data to the columns that are not being updated
+        schema = ''
+        for i in range(self.num_cols):
+            if columns[i] is not None:
+                schema += '1'
+                self.pages[i].write(columns[i])
             else:
-                if not isinstance(self.pages[i], list) or len(self.pages[i]) == 0:
-                    print("ERROR: Column {i} has no valid pages for RID {rid}")
-                    continue
-
-                # if self.pages[i] is not a list, wrap it in a list
-                if isinstance(self.pages[i], list):
-                    page_list = self.pages[i]
-                else:
-                    page_list = [self.pages[i]]
-
-                # Find the page that contains the record at this offset
-                index = offset
-                value = None
-
-                # Read from newest to oldest
-                for page in reversed(page_list):
-                    # Record is in this page
-                    if index < page.num_records:
-                        value = page.read(index)
-                        break
-                    #Record is not in the page, subtract num_records from this page to go to next page in list
-                    index -= page.num_records
-            record_columns.append(value)
-
-        # Record constructor needs key but since PageRange does not store the key, we can just pass None for now
-        return Record(rid, None, record_columns)
+                schema += '0'
+                self.pages[i].write(record.columns[i])
+                
+        # Append the schema to the page
+        self.schema_encoding.append(schema)
+        
+        # Increment the number of records in the page
+        self.num_records += 1
+        
+        # Return True to indicate that the record was successfully inserted
+        return True

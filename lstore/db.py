@@ -1,5 +1,4 @@
 from lstore.table import Table
-from lstore.index import Index
 
 class Database():
 
@@ -21,17 +20,14 @@ class Database():
     :param key: int             #Index of table key in columns
     """
     def create_table(self, name, num_columns, key_index):
-        #Check for dupe table
+        # Check if the table already exists
         for table in self.tables:
             if table.name == name:
                 raise Exception(f"Table {name} already exists")
-    
+
+        # Create a new table and add it to the list of tables
         table = Table(name, num_columns, key_index)
         self.tables.append(table)
-
-        for i in range (0, num_columns):
-            table.index.create_index(i)
-
         return table
 
     
@@ -39,13 +35,9 @@ class Database():
     # Deletes the specified table
     """
     def drop_table(self, name):
+        # Check if the table exists and delete it
         for i, table in enumerate(self.tables):
             if table.name == name:
-                #Drop all indices for specified table
-                for col in range(table.num_columns):
-                    table.index.drop_index(col)
-                
-                #Then remove table
                 self.tables.pop(i)
                 return
         
@@ -56,7 +48,7 @@ class Database():
     # Returns table with the passed name
     """
     def get_table(self, name):
-
+        # Check if the table exists and return it
         for table in self.tables:
             if table.name == name:
                 return table

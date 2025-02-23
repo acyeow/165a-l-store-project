@@ -1,4 +1,5 @@
 from lstore.index import Index
+from lstore.page_range import PageRange
 from time import time
 
 INDIRECTION_COLUMN = 0
@@ -10,22 +11,7 @@ class Record:
     def __init__(self, rid, key, columns):
         self.rid = rid
         self.key = key
-        #Columns[0] = Indirection
-        #Columns[1] = RID
-        #Columns[2] = Timestamp
-        #Columns[3] = Schema Encoding
         self.columns = columns
-
-class PageRangeFinder:
-    def __init__(self):
-        self.page_ranges = {}
-
-    def add_page_range(self, start, end):
-        for rid in range(start, end + 1):
-            self.page_ranges[rid] = (start, end)
-
-    def find_page_range(self, rid):
-        return self.page_ranges.get(rid, None)
 
 class Table:
     """
@@ -40,116 +26,76 @@ class Table:
         self.page_directory = {}
         self.index = Index(self)
         self.page_ranges = []
-        self.current_rid = 0
+        
+        # Initialize the first page range
+        self.add_page_range(num_columns)
 
-    def create_page_range(self, is_base=True):
-        from lstore.page import PageRange
-        start_rid = self.current_rid
-        end_rid = start_rid + 999
-        page_range = PageRange(start_rid, end_rid, self.num_columns, is_base)
-        self.page_ranges.append(page_range)
-        return page_range
-
-    def get_page_range(self, rid):
+    def find_current_base_page(self):
+        # Find the first base page with capacity
         for page_range in self.page_ranges:
-            if page_range.start_rid <= rid <= page_range.end_rid:
-                return page_range
-        return None
-    
-    def get_next_rid(self):
-        next_rid = self.current_rid
-        self.current_rid += 1
-        return next_rid
+            for base_page in page_range.base_pages:
+                if base_page.has_capacity():
+                    return page_range, base_page
 
-    def insert_record(self, record):
-        page_range = self.get_page_range(record.rid)
-        if page_range is None or not page_range.is_base or not all(page_list[-1].has_capacity() for page_list in page_range.pages):
-            page_range = self.create_page_range(is_base=True)
+        # If no base page has capacity, create a new base page
+        if not self.page_ranges[-1].has_capacity():
+            self.add_page_range(self.num_columns)
+        self.page_ranges[-1].add_base_page(self.num_columns)
         
-        success = page_range.add_record(self, record.rid, record)
-        return success
+        return self.page_ranges[-1], self.page_ranges[-1].base_pages[-1]
 
-    def update_record(self, rid, updated_columns):
-
-        tail_page_range = self.get_page_range(self.current_rid)
-        if tail_page_range is None or tail_page_range.is_base:
-            tail_page_range = self.create_page_range(is_base=False)
-
-        base_record = self.get_record_by_rid(rid)
-
-        while base_record.columns[INDIRECTION_COLUMN] not in (None, -1) and base_record.columns[INDIRECTION_COLUMN] != rid:
-            base_record = self.get_record_by_rid(base_record.columns[INDIRECTION_COLUMN])
-
-        if base_record is None:
-            return False
-        if base_record.columns[INDIRECTION_COLUMN] not in (None, -1):
-            base_record = self.get_record_by_rid(base_record.columns[INDIRECTION_COLUMN])
-        new_tail_rid = self.current_rid
-        new_tail_values = base_record.columns.copy()
-
-        for i in range(min(len(new_tail_values), len(updated_columns))):
-            if updated_columns[i] is not None:
-                new_tail_values[i] = updated_columns[i]
-
-        new_tail_record = Record(new_tail_rid, base_record.key, new_tail_values)
-        if tail_page_range.add_tail_record(new_tail_record):
-            self.page_directory[rid].get_record(rid).columns[INDIRECTION_COLUMN] = new_tail_rid
-            self.page_directory[new_tail_rid] = tail_page_range
-            self.current_rid += 1
-            return True
-        return False
-
-    def update_schema_encoding(self, schema_encoding, updated_columns):
-        for i, column in enumerate(updated_columns):
-            if column is not None:
-                schema_encoding |= (1 << i)
-        return schema_encoding
-    
-    def lookup_by_value(self, search_key, search_key_index):
-        return self.index.locate(self.key if search_key_index == self.key else search_key_index, search_key)
-    
-    def get_record_by_rid(self, rid):
+    def create_rid(self):
+        # Get the current base page
+        page_range, base_page = self.find_current_base_page()
         
-        # Look up the page range that contains this RID
-        page_range = self.page_directory.get(rid, None)
-        if page_range is None:
-            return None
+        # Create a new rid for a base page record
+        rid = (self.page_ranges.index(page_range), page_range.base_pages.index(base_page), base_page.num_records, 'b')
+        base_page.rid[base_page.num_records] = rid
         
-        return page_range.get_record(rid)
-    
-    def get_latest_record(self, rid):
+        return rid
 
-        base_record = self.get_record_by_rid(rid)
-        if base_record is None:
-            return None
+    def find_record(self, key, rid, projected_columns_index):
+        record = []
+        # Get the page type
+        page_type = 'base_pages' if rid[3] == 'b' else 'tail_pages'
+        # Get the pages
+        pages = getattr(self.page_ranges[rid[0]], page_type)[rid[1]].pages
 
-        # If no update, its indirection pointer is assumed to be -1 or None
-        if base_record.columns[INDIRECTION_COLUMN] in (None, -1):
-            return base_record
+        # Get the record from the pages
+        for i, projected in enumerate(projected_columns_index):
+            if projected == 1:
+                bytearray = pages[i].data
+                value = int.from_bytes(bytearray[rid[2] * 8:rid[2] * 8 + 8], byteorder='big')
+                record.append(value)
 
-        latest_record = base_record
-        visited_rids = set()
+        # Return the record
+        return Record(key, rid, record)
 
-        # While the current record has a valid indirection pointer, get its tail record
-        while latest_record.columns[INDIRECTION_COLUMN] not in (None, -1):
-            tail_rid = latest_record.columns[INDIRECTION_COLUMN]
+    def insert_record(self, start_time, schema_encoding, *columns):
+        # Get the current base page
+        page_range, base_page = self.find_current_base_page()
+        
+        # Create a new rid for a base page record
+        rid = self.create_rid()
+        
+        # Insert the record into the base page
+        indirection = rid
+        base_page.insert_base_page_record(rid, start_time, schema_encoding, indirection, *columns)
+        
+        # Create a new record
+        self.page_directory[rid] = Record(rid, columns[self.key], columns)
+        
+        # Insert the record into the index
+        key = columns[0]
+        self.index.insert(key, rid)
+        
+        return True
 
-            # Detect infinite loop
-            if tail_rid in visited_rids or tail_rid == rid:
-                print(f"Infinite loop: RID {tail_rid} is repeating.")
-                base_record.columns[1] = -1
-                break
-            visited_rids.add(tail_rid)
+    def add_page_range(self, num_columns):
+        # Create a new page range
+        new_page_range = PageRange(num_columns)
+        self.page_ranges.append(new_page_range)
 
-            tail_record = self.get_record_by_rid(tail_rid)
-            if tail_record is None:
-                break
-            latest_record = tail_record
-
-        return latest_record
-    
     def __merge(self):
         print("merge is happening")
         pass
-
- 
