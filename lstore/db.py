@@ -2,6 +2,7 @@ import os
 import msgpack
 from lstore.config import BUFFERPOOL_SIZE
 from lstore.table import Table
+import datetime
 
 class Database():
 
@@ -179,9 +180,53 @@ class Database():
                 f.write(msgpack.packb(pr_data, use_bin_type=True))
 
 class Bufferpool:
-    def __init__(self, size):
-        self.size = size
+    def __init__(self, size, path):
+        self.size = size # bufferpool size
+        self.path = path # database path
         self.pages = {}  # page_id -> (page_data, is_dirty)
         self.page_paths = {}  # page_id -> disk_path
+        self.pins = {} # page_id -> pins in place (int)
         self.access_times = {}  # page_id -> last_access_time
         self.access_counter = 0
+
+    # Function for getting a page from the buffer pool and disk
+    def get_page(self, page_id, table_name, column_index):
+        # If page is in the bufferpool, access it and update access time and pin it
+        if page_id in self.pages[0]:
+            self.access_times[page_id] = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+            self.pins[page_id] = self.pins.get(page_id, 0) + 1
+            return self.pages[0][page_id]
+
+        # If the page is not in the bufferpool, load it from the disk and make space if necessary
+        if len(self.pages[0]) >= self.size:
+            self.evict_page
+
+        page_path = os.path.join()
+        self.page_paths[page_id] = page_path
+
+    # returns page_data
+
+    def set_page(self, page_id, table_name, column_index):
+        # sets a page and returns nothing
+
+    # Function for unpinning a page after done with it
+    def unpin_page(self, page_id):
+        # returns nothing and unpins a page
+
+    # Function for evicting a page from the bufferpool
+    def evict_page(self):
+        # evicts a page using lru and returns nothing
+
+    # Function for evicting all the pages from a table from
+    # Call this in drop_table()
+    def evict_table(self, table_name):
+        # Evicts multiple pages for a single table and returns nothing
+
+    # Function for writing a dirty page back into disk
+    def write_dirty(self, page_id, page_data):
+        # Writes the dirty page back into disk and returns nothing
+
+    # Write all dirty pages back into disk and evict all pages
+    # Call this function when the database closes
+    def reset(self):
+        # returns nothing and resets bufferpool
