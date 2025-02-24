@@ -26,7 +26,7 @@ class Database():
         self.bufferpool = Bufferpool(self.bufferpool_size)
 
         # Load the database metadata (list of tables) / USING MSG INSTEAD OF PICKLE
-        metadata_path = os.path.join(path, "metadata.msg")
+        metadata_path = os.path.join(path, "db_metadata.msg")
         if os.path.exists(metadata_path):
             with open(metadata_path, "rb") as f:
                 table_metadata = msgpack.unpackb(f.read(), raw=False)
@@ -34,13 +34,23 @@ class Database():
             # Reconstruct tables from metadata
             for table_info in table_metadata:
                 name = table_info['name']
-                num_columns = table_info['num_columns']
-                key_index = table_info['key_index']
                 
-                # Create table instance
-                table = Table(name, num_columns, key_index)
-                self.tables.append(table)
+                # Check if table already exists in memory / had an issue with dupes (ie. running the tester twice)
+                existing_table = None
+                for table in self.tables:
+                    if table.name == name:
+                        existing_table = table
+                        break
                 
+                # Only create the table if it doesn't already exist
+                if existing_table is None:
+                    num_columns = table_info['num_columns']
+                    key = table_info['key']
+                    
+                    # Create table instance
+                    table = Table(name, num_columns, key)
+                    self.tables.append(table)
+                    
                 # Load table data from disk
                 self.load_table_data(table, table_info)
 
@@ -51,20 +61,21 @@ class Database():
         if not self.path:
             raise Exception("Database is not open")
         
+        #Contains the metadata of each table in the database
         table_metadata = []
         for table in self.tables:
             table_info = {
                 'name': table.name,
                 'num_columns': table.num_columns,
-                'key_index': table.key_index,
+                'key': table.key,
             }
             table_metadata.append(table_info)
             
             # Save table data
-            self._save_table_data(table)
+            self.save_table_data(table)
 
         # Save table metadata / USING MSG INSTEAD OF PICKLE
-        metadata_path = os.path.join(self.path, "metadata.msg")
+        metadata_path = os.path.join(self.path, "db_metadata.msg")
         with open(metadata_path, "wb") as f:
             f.write(msgpack.packb(table_metadata, use_bin_type=True))
 
@@ -80,14 +91,14 @@ class Database():
     :param num_columns: int     #Number of Columns: all columns are integer
     :param key: int             #Index of table key in columns
     """
-    def create_table(self, name, num_columns, key_index):
+    def create_table(self, name, num_columns, key):
         # Check if the table already exists
         for table in self.tables:
             if table.name == name:
                 raise Exception(f"Table {name} already exists")
 
         # Create a new table and add it to the list of tables
-        table = Table(name, num_columns, key_index)
+        table = Table(name, num_columns, key)
         self.tables.append(table)
         return table
 
@@ -117,12 +128,55 @@ class Database():
         raise Exception(f"Table {name} does not exist")
     
     #Need to implement later
-    def load_table_data():
+    def load_table_data(self, table, table_info):
+        table_path = os.path.join(self.path, table.name)
+
+        if not os.path.exists(table_path):
+            os.makedirs(table_path)
+        
         pass
 
     #Need to implement later
-    def save_table_data():
-        pass
+    def save_table_data(self, table):
+        #Set up file structure .../table/page_ranges/
+        table_path = os.path.join(self.path, table.name)
+        page_ranges_path = os.path.join(table_path, "page_ranges")
+        os.makedirs(page_ranges_path, exist_ok=True)
+        
+        #Contains the metadata of the specific table
+        #Save table metadata in .../table/
+        metadata = {
+            'name' : table.name,
+            'num_columns': table.num_columns,
+            'key': table.key,
+            #planning on saving the page ranges as individual files to store the data
+            #this should help verify that the amount of data matches the given metadata
+            'page_range_count': len(table.page_ranges)
+        }
+        with open(os.path.join(table_path, "tb_metadata.msg"), "wb") as f:
+            f.write(msgpack.packb(metadata, use_bin_type=True))
+        
+        # Save each page range
+        for pr_index, page_range in enumerate(table.page_ranges):
+            pr_data = {'base_pages': [], 'tail_pages': []}
+            
+            # Helper function to serialize a page
+            def serialize_page(page, page_type):
+            #I haven't figured out how to format the saved data
+                return 0
+            
+            # Serialize base pages
+            for base_page in page_range.base_pages:
+                pr_data['base_pages'].append(serialize_page(base_page, 'base'))
+            
+            # Serialize tail pages
+            for tail_page in page_range.tail_pages:
+                pr_data['tail_pages'].append(serialize_page(tail_page, 'tail'))
+            
+            # Save page range to file
+            pr_file_path = os.path.join(page_ranges_path, f"page_range_{pr_index}.msg")
+            with open(pr_file_path, "wb") as f:
+                f.write(msgpack.packb(pr_data, use_bin_type=True))
 
 class Bufferpool:
     def __init__(self, size):
