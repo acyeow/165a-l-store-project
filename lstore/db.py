@@ -1,17 +1,57 @@
+import os
+import pickle
 from lstore.table import Table
 
 class Database():
 
     def __init__(self):
         self.tables = []
-        pass
+        self.path = None
 
-    # Not required for milestone1
     def open(self, path):
-        pass
+        """
+        Opens the database from the specified path.
+        If the database does not exist, it initializes an empty database.
+        """
+        self.path = path
+
+        # Create the directory if it doesn't exist
+        if not os.path.exists(path):
+            os.makedirs(path)
+            return 
+
+        # Load the database metadata (list of tables)
+        metadata_path = os.path.join(path, "metadata.pkl")
+        if os.path.exists(metadata_path):
+            with open(metadata_path, "rb") as f:
+                table_metadata = pickle.load(f)
+
+            # Reconstruct tables from metadata
+            for name, num_columns, key_index in table_metadata:
+                table = Table(name, num_columns, key_index)
+                table.load_from_disk(path)  # Assume Table has a method to load data from disk
+                self.tables.append(table)
 
     def close(self):
-        pass
+        """
+        Saves the current state of the database to disk and closes it.
+        """
+        if not self.path:
+            raise Exception("Database is not open")
+
+        # Save table metadata
+        metadata_path = os.path.join(self.path, "metadata.pkl")
+        table_metadata = [(table.name, table.num_columns, table.key_index) for table in self.tables]
+        with open(metadata_path, "wb") as f:
+            pickle.dump(table_metadata, f)
+
+        # Save each table's data to disk
+        for table in self.tables:
+            table.save_to_disk(self.path)  # Assume Table has a method to save data to disk
+
+        # Clear in-memory state
+        self.tables = []
+        self.path = None
 
     """
     # Creates a new table
