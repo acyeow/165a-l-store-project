@@ -190,7 +190,7 @@ class Bufferpool:
         self.access_counter = 0
 
     # Function for getting a page from the buffer pool and disk
-    def get_page(self, page_id, table_name, column_index):
+    def get_page(self, page_id, table_name):
         # If page is in the bufferpool, access it and update access time and pin it
         if page_id in self.pages[0]:
             self.access_times[page_id] = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
@@ -206,7 +206,7 @@ class Bufferpool:
 
     # returns page_data
 
-    def set_page(self, page_id, table_name, column_index):
+    def set_page(self, page_id, table_name):
         # sets a page and returns nothing
 
     # Function for unpinning a page after done with it
