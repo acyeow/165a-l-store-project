@@ -109,7 +109,8 @@ class BPlusTree:
             self.split_internal(parent)
 
     # Traverse operation
-    def traverse(self, node, begin=None, end=None):
+    def traverse(self, begin=None, end=None):
+        node = self.root
         # Keep a result for returning
         result = []
 
@@ -136,35 +137,34 @@ class BPlusTree:
         return result
 
     # Deletion operation
-    def delete(self, key, value=None):
+    def delete(self, key):
         leaf = self.find_leaf(key)
-        deleted = False
-        for i, (k, v) in enumerate(leaf.keys):
-            if k == key and (value is None or v == value):
-                leaf.keys.pop(i)
-                deleted = True
-                break
-        if not deleted:
-            return False
 
-        # If leaf is the root, adjust if empty.
-        if leaf == self.root:
-            if not leaf.keys:
-                self.root = BPlusTreeNode(leaf=True)
-            return True
+        # Binary search to find the key
+        left, right = 0, len(leaf.keys)
+        while left < right:
+            mid = (left + right) // 2
+            if leaf.keys[mid][0] < key:
+                left = mid + 1
+            else:
+                right = mid
 
-        # Check if the leaf node is underfull.
-        if len(leaf.keys) < self.t:
-            self.fix(leaf)
-        return True
+        # If key exists, remove it
+        if left < len(leaf.keys) and leaf.keys[left][0] == key:
+            leaf.keys.pop(left)
 
-    # Helper function for after deletion operation
-    def fix(self, node):
-        """
-        Restore B+ tree properties after deletion.
-        Try borrowing from siblings; if not possible, merge nodes.
-        """
-        # If we're at the root, handle special case.
+            # Handle root case
+            if leaf == self.root:
+                if not leaf.keys:
+                    self.root = BPlusTreeNode(leaf=True)
+                return
+
+            # Fix underflow if necessary
+            if len(leaf.keys) < self.t:
+                self.fix_structure(leaf)
+
+    # Restoration function for keeping structure after deletion
+    def fix_structure(self, node):
         if node == self.root:
             if not node.leaf and len(node.children) == 1:
                 self.root = node.children[0]
@@ -173,21 +173,22 @@ class BPlusTree:
 
         parent = node.parent
         index = parent.children.index(node)
+        if index > 0:
+            left_sibling = parent.children[index - 1]
+        else:
+            left_sibling = None
+        if index < len(parent.children) - 1:
+            right_sibling = parent.children[index + 1]
+        else:
+            right_sibling = None
 
-        # Identify siblings.
-        left_sibling = parent.children[index - 1] if index > 0 else None
-        right_sibling = parent.children[index + 1] if index < len(parent.children) - 1 else None
-
-        # --- Borrow from left sibling ---
+        # Borrow from left sibling if possible
         if left_sibling and len(left_sibling.keys) > self.t:
             if node.leaf:
-                # Borrow the last key from the left sibling.
                 borrowed = left_sibling.keys.pop(-1)
                 node.keys.insert(0, borrowed)
-                # Update parent's separator to the new first key of node.
                 parent.keys[index - 1] = node.keys[0][0]
             else:
-                # For internal nodes, borrow from left sibling.
                 borrowed_key = left_sibling.keys.pop(-1)
                 borrowed_child = left_sibling.children.pop(-1)
                 node.keys.insert(0, parent.keys[index - 1])
@@ -196,12 +197,11 @@ class BPlusTree:
                 parent.keys[index - 1] = borrowed_key
             return
 
-        # --- Borrow from right sibling ---
+        # Borrow from right sibling if possible
         if right_sibling and len(right_sibling.keys) > self.t:
             if node.leaf:
                 borrowed = right_sibling.keys.pop(0)
                 node.keys.append(borrowed)
-                # Update parent's separator with the new first key of right sibling.
                 parent.keys[index] = right_sibling.keys[0][0] if right_sibling.keys else None
             else:
                 borrowed_key = right_sibling.keys.pop(0)
@@ -212,9 +212,8 @@ class BPlusTree:
                 parent.keys[index] = borrowed_key
             return
 
-        # --- Merge if borrowing is not possible ---
+        # Merge with a sibling (prefer left if available)
         if left_sibling:
-            # Merge node into left sibling.
             if node.leaf:
                 left_sibling.keys.extend(node.keys)
                 left_sibling.next = node.next
@@ -224,12 +223,9 @@ class BPlusTree:
                 left_sibling.children.extend(node.children)
                 for child in node.children:
                     child.parent = left_sibling
-            # Remove the separator key and pointer for the merged node.
             parent.keys.pop(index - 1)
             parent.children.pop(index)
-            self.fix_delete(parent)
         elif right_sibling:
-            # Merge right sibling into node.
             if node.leaf:
                 node.keys.extend(right_sibling.keys)
                 node.next = right_sibling.next
@@ -241,7 +237,12 @@ class BPlusTree:
                     child.parent = node
             parent.keys.pop(index)
             parent.children.pop(index + 1)
-            self.fix_delete(parent)
+        else:
+            return
+
+        # Fix parent if necessary
+        if len(parent.keys) < self.t:
+            self.fix_structure(parent)
 
 class Index:
     def __init__(self, table, t=3):
@@ -268,7 +269,7 @@ class Index:
         if column >= len(self.indices) or self.indices[column] is None:
             return []
         # Return the list of RIDs for the given range in the column, empty list if no records found
-        return self.indices[column].traverse(self.indices[column].root, begin, end)
+        return self.indices[column].traverse(begin, end)
 
 
     """
