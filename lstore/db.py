@@ -1,5 +1,6 @@
 import os
-import pickle
+import msgpack
+from lstore.config import BUFFERPOOL_SIZE
 from lstore.table import Table
 
 class Database():
@@ -7,6 +8,8 @@ class Database():
     def __init__(self):
         self.tables = []
         self.path = None
+        self.bufferpool = None
+        self.bufferpool_size = BUFFERPOOL_SIZE
 
     def open(self, path):
         """
@@ -20,17 +23,26 @@ class Database():
             os.makedirs(path)
             return 
 
-        # Load the database metadata (list of tables)
-        metadata_path = os.path.join(path, "metadata.pkl")
+        self.bufferpool = Bufferpool(self.bufferpool_size)
+
+        # Load the database metadata (list of tables) / USING MSG INSTEAD OF PICKLE
+        metadata_path = os.path.join(path, "metadata.msg")
         if os.path.exists(metadata_path):
             with open(metadata_path, "rb") as f:
-                table_metadata = pickle.load(f)
+                table_metadata = msgpack.unpackb(f.read(), raw=False)
 
             # Reconstruct tables from metadata
-            for name, num_columns, key_index in table_metadata:
+            for table_info in table_metadata:
+                name = table_info['name']
+                num_columns = table_info['num_columns']
+                key_index = table_info['key_index']
+                
+                # Create table instance
                 table = Table(name, num_columns, key_index)
-                table.load_from_disk(path)  # Assume Table has a method to load data from disk
                 self.tables.append(table)
+                
+                # Load table data from disk
+                self.load_table_data(table, table_info)
 
     def close(self):
         """
@@ -38,20 +50,29 @@ class Database():
         """
         if not self.path:
             raise Exception("Database is not open")
-
-        # Save table metadata
-        metadata_path = os.path.join(self.path, "metadata.pkl")
-        table_metadata = [(table.name, table.num_columns, table.key_index) for table in self.tables]
-        with open(metadata_path, "wb") as f:
-            pickle.dump(table_metadata, f)
-
-        # Save each table's data to disk
+        
+        table_metadata = []
         for table in self.tables:
-            table.save_to_disk(self.path)  # Assume Table has a method to save data to disk
+            table_info = {
+                'name': table.name,
+                'num_columns': table.num_columns,
+                'key_index': table.key_index,
+            }
+            table_metadata.append(table_info)
+            
+            # Save table data
+            self._save_table_data(table)
+
+        # Save table metadata / USING MSG INSTEAD OF PICKLE
+        metadata_path = os.path.join(self.path, "metadata.msg")
+        with open(metadata_path, "wb") as f:
+            f.write(msgpack.packb(table_metadata, use_bin_type=True))
 
         # Clear in-memory state
+        # Flush bufferpool (function inside bufferpool)
         self.tables = []
         self.path = None
+        self.bufferpool = None
 
     """
     # Creates a new table
@@ -94,3 +115,19 @@ class Database():
                 return table
         
         raise Exception(f"Table {name} does not exist")
+    
+    #Need to implement later
+    def load_table_data():
+        pass
+
+    #Need to implement later
+    def save_table_data():
+        pass
+
+class Bufferpool:
+    def __init__(self, size):
+        self.size = size
+        self.pages = {}  # page_id -> (page_data, is_dirty)
+        self.page_paths = {}  # page_id -> disk_path
+        self.access_times = {}  # page_id -> last_access_time
+        self.access_counter = 0
