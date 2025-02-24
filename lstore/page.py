@@ -1,6 +1,4 @@
-PAGE_SIZE = 4096
-DATA_SIZE = 8
-RECORDS_PER_PAGE = PAGE_SIZE // DATA_SIZE
+from lstore.config import PAGE_SIZE, RECORDS_PER_PAGE
 
 class LogicalPage:
     def __init__(self):

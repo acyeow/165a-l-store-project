@@ -1,4 +1,4 @@
-MAX_BASE_PAGES = 16
+from lstore.config import MAX_BASE_PAGES
 from lstore.page import BasePage, TailPage
 
 class PageRange:
