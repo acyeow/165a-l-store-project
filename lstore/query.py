@@ -61,10 +61,16 @@ class Query:
         rid = rid[0]
         
         # Get the record
-        rid = self.table.page_ranges[rid[0]].base_pages[rid[1]].indirection[rid[2]]
+        # rid = self.table.page_ranges[rid[0]].base_pages[rid[1]].indirection[rid[2]]
         
         # Use the index to finc the record
-        record = self.table.find_record(search_key, rid, projected_columns_index)
+        # record = self.table.find_record(search_key, rid, projected_columns_index)
+        
+        try:
+            rid = self.table.page_ranges[rid[0]].base_pages[rid[1]].indirection[rid[2]]
+            record = self.table.find_record(search_key, rid, projected_columns_index)
+        except IndexError:
+            print(f"IndexError: Invalid RID {rid}")
         
         return [record]
 
