@@ -25,7 +25,7 @@ class Database():
             os.makedirs(path)
             return 
 
-        self.bufferpool = Bufferpool(self.bufferpool_size)
+        self.bufferpool = Bufferpool(self.bufferpool_size, self.path)
 
         # Load the database metadata (list of tables) / USING MSG INSTEAD OF PICKLE
         metadata_path = os.path.join(path, "db_metadata.msg")
@@ -82,7 +82,9 @@ class Database():
             f.write(msgpack.packb(table_metadata, use_bin_type=True))
 
         # Clear in-memory state
-        # Flush bufferpool (function inside bufferpool)
+        if self.bufferpool:
+            self.bufferpool.reset()
+
         self.tables = []
         self.path = None
         self.bufferpool = None
@@ -164,8 +166,11 @@ class Database():
             
             # Helper function to serialize a page
             def serialize_page(page, page_type):
-            #I haven't figured out how to format the saved data
-                return 0
+                return {
+                    'columns': [col.data for col in page.pages],
+                    'page_type': page_type,
+                    'tps': page.tps if hasattr(page, 'tps') else None
+                }
             
             # Serialize base pages
             for base_page in page_range.base_pages:
@@ -175,10 +180,10 @@ class Database():
             for tail_page in page_range.tail_pages:
                 pr_data['tail_pages'].append(serialize_page(tail_page, 'tail'))
             
-            # Save page range to file
-            pr_file_path = os.path.join(page_ranges_path, f"page_range_{pr_index}.msg")
-            with open(pr_file_path, "wb") as f:
-                f.write(msgpack.packb(pr_data, use_bin_type=True))
+        # Save page range to file
+        pr_file_path = os.path.join(page_ranges_path, f"page_range_{pr_index}.msg")
+        with open(pr_file_path, "wb") as f:
+            f.write(msgpack.packb(pr_data, use_bin_type=True))
 
 class Bufferpool:
     def __init__(self, size, path):
