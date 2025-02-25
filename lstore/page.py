@@ -93,6 +93,7 @@ class TailPage:
         self.schema_encoding = []
         self.start_time = []
         self.pages = []
+        self.tps = 0
         
         # Initialize a LogicalPage for each column
         for _ in range(self.num_cols):

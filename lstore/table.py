@@ -1,6 +1,7 @@
 from lstore.index import Index
 from lstore.page_range import PageRange
 from lstore.page import BasePage, LogicalPage
+from lstore.config import MERGE_THRESHOLD
 import threading
 import datetime
 
@@ -105,10 +106,10 @@ class Table:
         self.index.insert(key, rid)
         
         # Increment the merge counter and trigger merge if necessary
-        self.merge_counter += 1
-        if self.merge_counter >= 500:
-            self.merge_counter = 0
-            self.trigger_merge()
+        # self.merge_counter += 1
+        # if self.merge_counter >= MERGE_THRESHOLD:
+        #     self.merge_counter = 0
+        #     self.trigger_merge()
         
         return True
     
@@ -160,7 +161,7 @@ class Table:
         
         # Increment the merge counter and trigger merge if necessary
         self.merge_counter += 1
-        if self.merge_counter >= 500:
+        if self.merge_counter >= MERGE_THRESHOLD:
             self.merge_counter = 0
             self.trigger_merge()
     
@@ -177,6 +178,7 @@ class Table:
     def merge(self):
         with self.lock:
             for page_range in self.page_ranges:
+                merged_base_pages = []
                 for base_page in page_range.base_pages:
                     # Create a copy of the base page
                     merged_base_page = BasePage(self.num_columns)
@@ -192,28 +194,51 @@ class Table:
                         merged_base_page.start_time.append(base_page.start_time[i])
                         merged_base_page.rid.append(base_page.rid[i])
                     
-                    # Apply the tail page updates to the merged base page
-                    applied_rids = set()
-                    for tail_page in reversed(page_range.tail_pages):
-                        for i in range(tail_page.num_records):
-                            base_rid = tail_page.indirection[i]
-                            if base_rid in base_page.rid and base_rid not in applied_rids:
-                                base_index = base_page.rid.index(base_rid)
-                                for j in range(self.num_columns):
-                                    if tail_page.schema_encoding[i][j] == '1':
-                                        value = tail_page.pages[j].read(i, 1)[0]
-                                        merged_base_page.pages[j].write(value)
-                                applied_rids.add(base_rid)
+                    # Track the latest updates for each base record
+                    latest_updates = {}  # base_rid -> (tail_page_index, record_index)
+                    for tail_page_index, tail_page in enumerate(reversed(page_range.tail_pages)):
+                        for record_index in range(tail_page.num_records):
+                            base_rid = tail_page.indirection[record_index]
+                            if base_rid in base_page.rid:
+                                latest_updates[base_rid] = (len(page_range.tail_pages) - 1 - tail_page_index, record_index)
                     
-                    # Update the page directory to point to the merged base page
-                    base_page.pages = merged_base_page.pages
-                    base_page.num_records = merged_base_page.num_records
-                    base_page.indirection = merged_base_page.indirection
-                    base_page.schema_encoding = merged_base_page.schema_encoding
-                    base_page.start_time = merged_base_page.start_time
-                    base_page.rid = merged_base_page.rid
-
-                    # Update the indirection pointers in the page directory
-                    for rid in base_page.rid:
-                        if rid in self.page_directory:
-                            self.page_directory[rid].rid = rid
+                    # Apply only the most recent updates
+                    updated_columns = {base_rid: set() for base_rid in base_page.rid}
+                    for base_rid, (tail_page_index, record_index) in latest_updates.items():
+                        tail_page = page_range.tail_pages[tail_page_index]
+                        base_index = base_page.rid.index(base_rid)
+                        for j in range(self.num_columns):
+                            if tail_page.schema_encoding[record_index][j] == '1' and j not in updated_columns[base_rid]:
+                                value = tail_page.pages[j].read(record_index, 1)[0]
+                                merged_base_page.pages[j].write(value)
+                                updated_columns[base_rid].add(j)
+                    
+                    # Traverse the lineage to incorporate all recent updates
+                    for i in range(merged_base_page.num_records):
+                        current_rid = merged_base_page.indirection[i]
+                        while current_rid[3] == 't':
+                            tail_page = page_range.tail_pages[current_rid[1]]
+                            record_index = current_rid[2]
+                            for j in range(self.num_columns):
+                                if tail_page.schema_encoding[record_index][j] == '1' and j not in updated_columns[merged_base_page.rid[i]]:
+                                    value = tail_page.pages[j].read(record_index, 1)[0]
+                                    merged_base_page.pages[j].write(value)
+                                    updated_columns[merged_base_page.rid[i]].add(j)
+                            current_rid = tail_page.indirection[record_index]
+                    
+                    # Create new keys for the merged records
+                    new_keys = []
+                    for i in range(merged_base_page.num_records):
+                        new_key = max(self.page_directory.keys()) + 1
+                        new_keys.append(new_key)
+                        self.page_directory[new_key] = self.page_directory[merged_base_page.rid[i]]
+                        self.page_directory[new_key].key = new_key
+                    
+                    # Update TPS for the merged base page
+                    # merged_base_page.tps = max(tail_page.tps for tail_page in page_range.tail_pages)
+                    
+                    # Add the merged base page to the list
+                    merged_base_pages.append(merged_base_page)
+                
+                # Replace old base pages with merged base pages
+                page_range.base_pages = merged_base_pages
