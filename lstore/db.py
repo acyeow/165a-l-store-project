@@ -4,7 +4,6 @@ from lstore.config import BUFFERPOOL_SIZE
 from lstore.config import PAGE_SIZE
 from lstore.table import Table
 import datetime
-import numpy as np
 
 
 class Database:
@@ -143,105 +142,13 @@ class Database:
             return  # New table, nothing to load
 
         # Load table metadata
-        table_meta_path = os.path.join(table_path, "table_meta.msg")
+        table_meta_path = os.path.join(table_path, "tb_metadata.msg")
         if not os.path.exists(table_meta_path):
             return  # No data to load
 
-        with open(table_meta_path, "rb") as f:
-            table_meta = msgpack.unpackb(f.read(), raw=False)
+        # Load Page Directory and rebuild them
 
-        # Load Index/Page Directory and rebuild them
-
-        # Load page ranges
-        page_ranges_path = os.path.join(table_path, "page_ranges")
-        if not os.path.exists(page_ranges_path):
-            return  # No page ranges to load
-
-        # Check how many page ranges we need to load
-        page_range_count = table_meta.get("page_range_count", 0)
-
-        # Initialize page ranges in the table
-        table.page_ranges = []
-
-        for pr_index in range(page_range_count):
-            pr_file_path = os.path.join(page_ranges_path, f"page_range_{pr_index}.msg")
-            if not os.path.exists(pr_file_path):
-                continue  # Skip if file doesn't exist
-
-            with open(pr_file_path, "rb") as f:
-                pr_data = msgpack.unpackb(f.read(), raw=False)
-
-            # Create a new page range
-            from lstore.page_range import (
-                PageRange,
-            )  # Import here to avoid circular imports
-
-            page_range = PageRange()
-
-            # Load base pages
-            page_range.base_pages = []
-            for serialized_page in pr_data["base_pages"]:
-                from lstore.page import Page  # Import here to avoid circular imports
-
-                page = Page()
-                page.page_id = serialized_page["page_id"]
-
-                # Convert bytes back to appropriate data structure
-
-                if isinstance(serialized_page["data"], bytes):
-                    # Assuming data was stored as numpy array
-                    page.data = np.frombuffer(serialized_page["data"], dtype=np.int64)
-                else:
-                    page.data = serialized_page["data"]
-
-                page.num_records = serialized_page["num_records"]
-                if "schema_encoding" in serialized_page:
-                    page.schema_encoding = serialized_page["schema_encoding"]
-
-                page_range.base_pages.append(page)
-
-                # Register page with bufferpool for future access
-                if self.bufferpool:
-                    page_id = f"{table.name}_base_{pr_index}_{page.page_id}"
-                    self.bufferpool.pages[page_id] = (page.data, False)  # Not dirty
-                    self.bufferpool.page_paths[page_id] = pr_file_path
-                    self.bufferpool.access_times[page_id] = (
-                        self.bufferpool.access_counter
-                    )
-                    self.bufferpool.access_counter += 1
-
-            # Load tail pages (similar to base pages)
-            page_range.tail_pages = []
-            for serialized_page in pr_data["tail_pages"]:
-                from lstore.page import Page
-
-                page = Page()
-                page.page_id = serialized_page["page_id"]
-
-                # Convert bytes back to appropriate data structure
-
-                if isinstance(serialized_page["data"], bytes):
-                    page.data = np.frombuffer(serialized_page["data"], dtype=np.int64)
-                else:
-                    page.data = serialized_page["data"]
-
-                page.num_records = serialized_page["num_records"]
-                if "schema_encoding" in serialized_page:
-                    page.schema_encoding = serialized_page["schema_encoding"]
-
-                page_range.tail_pages.append(page)
-
-                # Register page with bufferpool for future access
-                if self.bufferpool:
-                    page_id = f"{table.name}_tail_{pr_index}_{page.page_id}"
-                    self.bufferpool.page_paths[page_id] = pr_file_path
-                    self.bufferpool.pages[page_id] = (page.data, False)  # Not dirty
-                    self.bufferpool.access_times[page_id] = (
-                        self.bufferpool.access_counter
-                    )
-                    self.bufferpool.access_counter += 1
-
-            table.page_ranges.append(page_range)
+        # Iterate over the Page Directory and rebuild the Index via Insertion
 
     # Need to implement later
     def save_table_data(self, table):
@@ -289,6 +196,15 @@ class Database:
         pr_file_path = os.path.join(page_ranges_path, f"page_range_{pr_index}.msg")
         with open(pr_file_path, "wb") as f:
             f.write(msgpack.packb(pr_data, use_bin_type=True))
+
+        # Save Page Directory
+        pg = {"rid": [], "data": []}
+        for key, value in table.page_directory.items():
+            pg["data"].append(key)
+            pg["rid"].append(value.columns)
+        
+        with open(os.path.join(table_path, "pg_directory.msg"), "wb") as f:
+            f.write(msgpack.packb(pg, use_bin_type=True))
 
 
 class Bufferpool:
