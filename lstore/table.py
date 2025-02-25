@@ -211,7 +211,7 @@ class Table:
                         tail_page = page_range.tail_pages[tail_page_index]
                         base_index = base_page.rid.index(base_rid)
                         for j in range(self.num_columns):
-                            if tail_page.schema_encoding[record_index][j] == '1' and j not in updated_columns[base_rid]:
+                            if record_index < len(tail_page.schema_encoding) and tail_page.schema_encoding[record_index][j] == '1' and j not in updated_columns[base_rid]:
                                 value = tail_page.pages[j].read(record_index, 1)[0]
                                 merged_base_page.pages[j].write(value)
                                 updated_columns[base_rid].add(j)
@@ -223,11 +223,11 @@ class Table:
                             tail_page = page_range.tail_pages[current_rid[1]]
                             record_index = current_rid[2]
                             for j in range(self.num_columns):
-                                if record_index < len(tail_page.schema_encoding) and tail_page.schema_encoding[record_index][j] == '1' and j not in updated_columns[base_rid]:
+                                if record_index < len(tail_page.schema_encoding) and tail_page.schema_encoding[record_index][j] == '1' and j not in updated_columns[merged_base_page.rid[i]]:
                                     value = tail_page.pages[j].read(record_index, 1)[0]
                                     merged_base_page.pages[j].write(value)
                                     updated_columns[merged_base_page.rid[i]].add(j)
-                            current_rid = tail_page.indirection[record_index]
+                                current_rid = tail_page.indirection[record_index]
                     
                     # Create new keys for the merged records
                     new_keys = []
@@ -238,7 +238,7 @@ class Table:
                         self.page_directory[new_key].key = new_key
                     
                     # Update TPS for the merged base page
-                    # merged_base_page.tps = max(tail_page.tps for tail_page in page_range.tail_pages)
+                    merged_base_page.tps = max(tail_page.tps for tail_page in page_range.tail_pages)
                     
                     # Add the merged base page to the list
                     merged_base_pages.append(merged_base_page)
@@ -246,5 +246,5 @@ class Table:
                 # Replace old base pages with merged base pages
                 page_range.base_pages = merged_base_pages
                 page_range.num_base_pages = len(merged_base_pages)
-                
+            
             # print("<----merging complete---->")
