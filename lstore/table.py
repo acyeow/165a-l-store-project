@@ -223,7 +223,7 @@ class Table:
                             tail_page = page_range.tail_pages[current_rid[1]]
                             record_index = current_rid[2]
                             for j in range(self.num_columns):
-                                if tail_page.schema_encoding[record_index][j] == '1' and j not in updated_columns[merged_base_page.rid[i]]:
+                                if record_index < len(tail_page.schema_encoding) and tail_page.schema_encoding[record_index][j] == '1' and j not in updated_columns[base_rid]:
                                     value = tail_page.pages[j].read(record_index, 1)[0]
                                     merged_base_page.pages[j].write(value)
                                     updated_columns[merged_base_page.rid[i]].add(j)

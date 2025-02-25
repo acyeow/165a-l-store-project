@@ -125,7 +125,7 @@ class Query:
         if result:
             self.table.merge_counter += 1
             if self.table.merge_counter >= MERGE_THRESHOLD:
-                print("merge counter reached")
+                # print("merge counter reached")
                 self.table.merge_counter = 0
                 self.table.trigger_merge()
         
