@@ -1,4 +1,5 @@
 from datetime import datetime
+from lstore.config import MERGE_THRESHOLD
 
 class Query:
     """
@@ -117,52 +118,18 @@ class Query:
     # Returns False if no records exist with given key or if the target record cannot be accessed due to 2PL locking
     """
     def update(self, primary_key, *columns):
-        # Get the RID of the record
-        rid = self.table.index.locate(self.table.key, primary_key)
-        if not rid:
-            return False
-        rid = rid[0]
-
-        # Check if the updated values lead to duplicate primary key, if so return False
-        if columns[self.table.key] is not None and columns[self.table.key] != primary_key:
-            if self.table.index.locate(self.table.key, columns[self.table.key]):
-                return False
+        # Call the update method of the Table class
+        result = self.table.update(primary_key, *columns)
         
-        # Unpack the RID data
-        page_range_index, page_index, record_index, _ = rid
+        # Increment the merge counter and trigger merge if necessary
+        if result:
+            self.table.merge_counter += 1
+            if self.table.merge_counter >= MERGE_THRESHOLD:
+                print("merge counter reached")
+                self.table.merge_counter = 0
+                self.table.trigger_merge()
         
-        # Get the current record
-        current_rid = self.table.page_ranges[page_range_index].base_pages[page_index].indirection[record_index]
-        
-        # Find the record
-        record = self.table.find_record(primary_key, current_rid, [1] * self.table.num_columns)
-        
-        # Check that we have space in the tail page
-        page_range = self.table.page_ranges[page_range_index]
-        if not page_range.tail_pages or not page_range.tail_pages[-1].has_capacity():
-            page_range.add_tail_page(self.table.num_columns)
-        
-        # Insert the new record in the tail page
-        current_tp = page_range.num_tail_pages - 1
-        tail_page = page_range.tail_pages[current_tp]
-        
-        start_time = datetime.now().strftime("%Y%m%d%H%M%S")
-        tail_page.insert_tail_page_record(*columns, record=record)
-        tail_page.start_time.append(start_time)
-        tail_page.indirection.append(rid)
-        
-        # Update the base page indirection
-        new_record_index = tail_page.num_records - 1
-        update_rid = (page_range_index, current_tp, new_record_index, 't')
-        tail_page.rid.append(update_rid)
-        page_range.base_pages[page_index].indirection[record_index] = update_rid
-        
-        # Update the schema encoding
-        for i in range(self.table.num_columns):
-            if tail_page.schema_encoding[new_record_index][i] == 1:
-                page_range.base_pages[page_index].schema_encoding[record_index][i] = 1
-        
-        return True
+        return result
 
     """
     :param start_range: int         # Start of the key range to aggregate 
