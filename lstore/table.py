@@ -160,10 +160,11 @@ class Table:
                 page_range.base_pages[page_index].schema_encoding[record_index][i] = 1
         
         # Increment the merge counter and trigger merge if necessary
-        self.merge_counter += 1
-        if self.merge_counter >= MERGE_THRESHOLD:
-            self.merge_counter = 0
-            self.trigger_merge()
+        # self.merge_counter += 1
+        # if self.merge_counter >= MERGE_THRESHOLD:
+        #     print("merge counter reached")
+        #     self.merge_counter = 0
+        #     self.trigger_merge()
     
         return True
     
@@ -172,11 +173,13 @@ class Table:
         self.page_ranges.append(page_range)
 
     def trigger_merge(self):
+        # print("<----triggering merge---->")
         merge_thread = threading.Thread(target=self.merge)
         merge_thread.start()
 
     def merge(self):
         with self.lock:
+            # print("<----merging---->")
             for page_range in self.page_ranges:
                 merged_base_pages = []
                 for base_page in page_range.base_pages:
@@ -242,3 +245,6 @@ class Table:
                 
                 # Replace old base pages with merged base pages
                 page_range.base_pages = merged_base_pages
+                page_range.num_base_pages = len(merged_base_pages)
+                
+            # print("<----merging complete---->")
