@@ -128,14 +128,28 @@ class Table:
         # Unpack the RID data
         page_range_index, page_index, record_index, _ = rid
         
+        # Ensure the indices are valid
+        if page_range_index >= len(self.page_ranges):
+            print(f"Invalid page_range_index: {page_range_index}")
+            return False
+        page_range = self.page_ranges[page_range_index]
+        
+        if page_index >= len(page_range.base_pages):
+            print(f"Invalid page_index: {page_index}")
+            return False
+        base_page = page_range.base_pages[page_index]
+        
+        if record_index >= len(base_page.indirection):
+            print(f"Invalid record_index: {record_index}")
+            return False
+        
         # Get the current record
-        current_rid = self.page_ranges[page_range_index].base_pages[page_index].indirection[record_index]
+        current_rid = base_page.indirection[record_index]
         
         # Find the record
         record = self.find_record(primary_key, current_rid, [1] * self.num_columns)
         
         # Check that we have space in the tail page
-        page_range = self.page_ranges[page_range_index]
         if not page_range.tail_pages or not page_range.tail_pages[-1].has_capacity():
             page_range.add_tail_page(self.num_columns)
         
@@ -152,19 +166,12 @@ class Table:
         new_record_index = tail_page.num_records - 1
         update_rid = (page_range_index, current_tp, new_record_index, 't')
         tail_page.rid.append(update_rid)
-        page_range.base_pages[page_index].indirection[record_index] = update_rid
+        base_page.indirection[record_index] = update_rid
         
         # Update the schema encoding
         for i in range(self.num_columns):
             if tail_page.schema_encoding[new_record_index][i] == 1:
-                page_range.base_pages[page_index].schema_encoding[record_index][i] = 1
-        
-        # Increment the merge counter and trigger merge if necessary
-        # self.merge_counter += 1
-        # if self.merge_counter >= MERGE_THRESHOLD:
-        #     print("merge counter reached")
-        #     self.merge_counter = 0
-        #     self.trigger_merge()
+                base_page.schema_encoding[record_index][i] = 1
     
         return True
     
@@ -179,7 +186,7 @@ class Table:
 
     def merge(self):
         with self.lock:
-            # print("<----merging---->")
+            print("<----merging---->")
             for page_range in self.page_ranges:
                 merged_base_pages = []
                 for base_page in page_range.base_pages:
@@ -247,4 +254,4 @@ class Table:
                 page_range.base_pages = merged_base_pages
                 page_range.num_base_pages = len(merged_base_pages)
             
-            # print("<----merging complete---->")
+            print("<----merging complete---->")

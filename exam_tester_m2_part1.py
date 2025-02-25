@@ -58,9 +58,9 @@ for _ in range(number_of_updates):
             updated_columns[i] = value
             # update our test directory
             records[key][i] = value
-    query.update(key, *updated_columns)
-    record = query.select(key, 0, [1, 1, 1, 1, 1])[0]
-    error = False
+        query.update(key, *updated_columns)
+        record = query.select(key, 0, [1, 1, 1, 1, 1])[0]
+        error = False
     for j, column in enumerate(record.columns):
         if column != records[key][j]:
             error = True
