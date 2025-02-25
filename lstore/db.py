@@ -293,11 +293,11 @@ class Database:
 
 class Bufferpool:
     def __init__(self, size, path):
-        self.size = size  # bufferpool size
-        self.path = path  # database path
+        self.size = size # bufferpool size
+        self.path = path # database path
         self.pages = {}  # page_id -> (page_data, is_dirty)
         self.page_paths = {}  # page_id -> disk_path
-        self.pins = {}  # page_id -> pins in place (int)
+        self.pins = {} # page_id -> pins in place (int)
         self.access_times = {}  # page_id -> last_access_time
         self.access_counter = 0
 
@@ -328,16 +328,18 @@ class Bufferpool:
 
         # Insert the new page into the bufferpool.
         self.pages[page_id] = (page_data, False)  # Set to not dirty
-        self.pins[page_id] = 1  # Page is pinned upon loading
+        self.pins[page_id] = 1                    # Page is pinned upon loading
         self.access_counter += 1
         self.access_times[page_id] = self.access_counter
 
         return page_data
 
-    def set_page(self, page_id, table_name):
+
+    def set_page(self, page_id, table_name, page_data):
         # First check if page exists already in bufferpool. If true, update access_counter and pin it.
 
         if page_id in self.pages:
+            self.pages[page_id] = (page_data, True)
             self.access_counter += 1
             self.access_times[page_id] = self.access_counter
             self.pins[page_id] = self.pins.get(page_id, 0) + 1
@@ -347,10 +349,9 @@ class Bufferpool:
         if len(self.pages) >= self.size:
             self.evict_page()
 
-        page_path = os.path.join(self.path, table_name, f"page_{page_id}.msg")
+        page_path = os.path.join(self.path, table_name, f"{page_id}.msg")
         self.page_paths[page_id] = page_path
-        page_data = bytearray(PAGE_SIZE)
-        self.pages[page_id] = (page_data, False)
+        self.pages[page_id] = (page_data, True)
         self.pins[page_id] = 1
         self.access_counter += 1
         self.access_times[page_id] = self.access_counter
