@@ -1,6 +1,7 @@
 import os
 import msgpack
 from lstore.config import BUFFERPOOL_SIZE
+from lstore.config import PAGE_SIZE
 from lstore.table import Table
 import datetime
 
@@ -192,41 +193,126 @@ class Bufferpool:
     # Function for getting a page from the buffer pool and disk
     def get_page(self, page_id, table_name):
         # If page is in the bufferpool, access it and update access time and pin it
-        if page_id in self.pages[0]:
-            self.access_times[page_id] = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        if page_id in self.pages:
+            self.access_counter += 1
+            self.access_times[page_id] = self.access_counter
             self.pins[page_id] = self.pins.get(page_id, 0) + 1
-            return self.pages[0][page_id]
+            return self.pages[page_id][0]  # Return page_data from (page_data, is_dirty)
 
-        # If the page is not in the bufferpool, load it from the disk and make space if necessary
-        if len(self.pages[0]) >= self.size:
-            self.evict_page
+        # If the page is not in the bufferpool and we are at capacity, evict one page
+        if len(self.pages) >= self.size:
+            self.evict_page()
 
-        page_path = os.path.join()
+        # Construct the disk file path
+        # Not too sure about this about the page path 
+        page_path = os.path.join(self.path, table_name, f"page_{page_id}.msg")
         self.page_paths[page_id] = page_path
 
-    # returns page_data
+        # Load the page from disk if it exists; otherwise create a new empty page
+        if os.path.exists(page_path):
+            with open(page_path, "rb") as f:
+                page_data = f.read()
+        else:
+            page_data = bytearray(PAGE_SIZE)
 
+        # Insert the new page into the bufferpool.
+        self.pages[page_id] = (page_data, False)  # Set to not dirty
+        self.pins[page_id] = 1                    # Page is pinned upon loading
+        self.access_counter += 1
+        self.access_times[page_id] = self.access_counter
+
+        return page_data
+
+    
     def set_page(self, page_id, table_name):
-        # sets a page and returns nothing
+        # First check if page exists already in bufferpool. If true, update access_counter and pin it. 
+        
+        if page_id in self.pages:
+            self.access_counter += 1
+            self.access_times[page_id] = self.access_counter
+            self.pins[page_id] = self.pins.get(page_id, 0) + 1
+            return
+        
+        # If bufferpool is full, evict LRU page
+        if len(self.pages) >= self.size:
+            self.evict_page()
+
+        page_path = os.path.join(self.path, table_name, f"page_{page_id}.msg")
+        self.page_paths[page_id] = page_path
+        page_data = bytearray(PAGE_SIZE)
+        self.pages[page_id] = (page_data, False)
+        self.pins[page_id] = 1
+        self.access_counter += 1
+        self.access_times[page_id] = self.access_counter
 
     # Function for unpinning a page after done with it
     def unpin_page(self, page_id):
-        # returns nothing and unpins a page
+        # Decrement the pin count
+        # Can only evict if pin count == 0
+        if page_id in self.pins and self.pins[page_id] > 0:
+            self.pins[page_id] -= 1
 
-    # Function for evicting a page from the bufferpool
+    # Function for evicting a page from the bufferpool using LRU
     def evict_page(self):
-        # evicts a page using lru and returns nothing
+        # Using LRU policy
+        # Checks if dirty, if True write to disk first
+        # Checks if page is pinned, if not remove from bufferpool
+        lru_page = None
+        oldest = None
+        for pid, access in self.access_times.items():
+            if self.pins.get(pid, 0) == 0:
+                if oldest is None or access < oldest:
+                    oldest = access
+                    lru_page = pid
 
-    # Function for evicting all the pages from a table from
+        if lru_page is None:
+            raise Exception("No unpinned page available for eviction.")
+
+        # If the evict page is dirty, write it to disk
+        page_data, is_dirty = self.pages[lru_page]
+        if is_dirty:
+            self.write_dirty(lru_page, page_data)
+        
+        # Remove the evict page from the bufferpool
+        del self.pages[lru_page]
+        del self.page_paths[lru_page]
+        del self.pins[lru_page]
+        del self.access_times[lru_page]
+
+    # Evicts all the pages from a table
     # Call this in drop_table()
     def evict_table(self, table_name):
-        # Evicts multiple pages for a single table and returns nothing
+        evicts = [pid for pid, path in self.page_paths.items() if table_name in path]
+        for pid in evicts:
+            # Only evict pages that are not currently pinned
+            if self.pins.get(pid, 0) == 0:
+                page_data, is_dirty = self.pages[pid]
+                if is_dirty:
+                    self.write_dirty(pid, page_data)
+                del self.pages[pid]
+                del self.page_paths[pid]
+                del self.pins[pid]
+                del self.access_times[pid]
 
-    # Function for writing a dirty page back into disk
+    # Writes a dirty page back into disk
     def write_dirty(self, page_id, page_data):
-        # Writes the dirty page back into disk and returns nothing
+        if page_id in self.page_paths:
+            path = self.page_paths[page_id]
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "wb") as f:
+                f.write(page_data)
+            # Mark the page as clean (not dirty)
+            if page_id in self.pages:
+                self.pages[page_id] = (page_data, False)
 
-    # Write all dirty pages back into disk and evict all pages
-    # Call this function when the database closes
+    # Write all dirty pages back into disk and evict all pages (flush)
     def reset(self):
-        # returns nothing and resets bufferpool
+        for pid in list(self.pages.keys()):
+            page_data, is_dirty = self.pages[pid]
+            if is_dirty:
+                self.write_dirty(pid, page_data)
+        self.pages.clear()
+        self.page_paths.clear()
+        self.pins.clear()
+        self.access_times.clear()
+        self.access_counter = 0
