@@ -60,22 +60,19 @@ class Query:
         if not rid:
             return []
         rid = rid[0]
-
-        # Fetch the page from the buffer pool (assume it's a base page)
-        page = self.table.bufferpool.get_page(rid[0], rid[1], is_base_page=True)
-        if not page:
-            return []
-
-        # Get the record from the page
-        if not hasattr(page, 'indirection') or rid[2] >= len(page.indirection):
-            return []  # Invalid indirection or RID index
-        rid = page.indirection[rid[2]]
-
-        # Find the record
-        record = self.table.find_record(search_key, rid, projected_columns_index)
-        if not record:
-            return []
-
+        
+        # Get the record
+        # rid = self.table.page_ranges[rid[0]].base_pages[rid[1]].indirection[rid[2]]
+        
+        # Use the index to finc the record
+        # record = self.table.find_record(search_key, rid, projected_columns_index)
+        
+        try:
+            rid = self.table.page_ranges[rid[0]].base_pages[rid[1]].indirection[rid[2]]
+            record = self.table.find_record(search_key, rid, projected_columns_index)
+        except IndexError:
+            print(f"IndexError: Invalid RID {rid}")
+        
         return [record]
 
     """

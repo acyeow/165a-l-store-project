@@ -11,52 +11,6 @@ RID_COLUMN = 1
 TIMESTAMP_COLUMN = 2
 SCHEMA_ENCODING_COLUMN = 3
 
-class BufferPool:
-    def __init__(self, size):
-        self.size = size  # Maximum number of pages in the buffer pool
-        self.pages = {}  # Maps (page_range_id, page_number) to BasePage or TailPage
-        self.dirty_pages = set()  # Tracks pages that have been modified
-
-    def get_page(self, page_range_id, page_number, is_base_page=True):
-        """
-        Fetch a page from the buffer pool.
-        If the page is not in memory, load it from disk.
-        """
-        key = (page_range_id, page_number)
-        if key in self.pages:
-            return self.pages[key]  # Page is already in memory
-        else:
-            # Load the page from disk (simulated here)
-            print(f"Loading page {key} from disk")
-            self.pages[key] = self.load_page_from_disk(page_range_id, page_number, is_base_page)
-            return self.pages[key]
-
-    def mark_dirty(self, page_range_id, page_number):
-        """
-        Mark a page as dirty (modified).
-        """
-        key = (page_range_id, page_number)
-        self.dirty_pages.add(key)
-
-    def load_page_from_disk(self, page_range_id, page_number, is_base_page):
-        """
-        Simulate loading a page from disk.
-        In a real implementation, this would read the page from disk.
-        """
-        if is_base_page:
-            return BasePage(num_cols=self.table.num_columns)  # Create a BasePage
-        else:
-            return TailPage(num_cols=self.table.num_columns)  # Create a TailPage
-
-    def flush(self):
-        """
-        Write all dirty pages back to disk.
-        """
-        for key in self.dirty_pages:
-            print(f"Writing page {key} to disk")
-            # Simulate writing the page to disk
-        self.dirty_pages.clear()
-
 class Record:
     def __init__(self, rid, key, columns):
         self.rid = rid
@@ -73,7 +27,6 @@ class Table:
         self.page_ranges = []
         self.merge_counter = 0
         self.lock = threading.Lock()
-        self.bufferpool = BufferPool(size=100)
         
         # Initialize the first page range
         self.add_page_range(num_columns)
