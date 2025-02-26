@@ -37,23 +37,13 @@ class Database:
             for table_info in table_metadata:
                 name = table_info["name"]
 
-                # Check if table already exists in memory / had an issue with dupes (ie. running the tester twice)
-                existing_table = None
-                for table in self.tables:
-                    if table.name == name:
-                        existing_table = table
-                        break
-
-                # Only create the table if it doesn't already exist
-                if existing_table is None:
-                    if existing_table is None:
-                        table = Table(
-                            name, table_info["num_columns"], table_info["key"]
-                        )
-                        self.tables.append(table)
-
-                # Load table data from disk
-                self.load_table_data(table, table_info)
+                # Create a new table
+                table = self.create_table(name, table_info["num_columns"], table_info["key"])
+                
+                # Load table data from disk if the directory exists
+                table_path = os.path.join(path, name)
+                if os.path.exists(table_path):
+                    self.load_table_data(table, table_info)
 
     def close(self):
         """
@@ -143,12 +133,32 @@ class Database:
 
         # Load table metadata
         table_meta_path = os.path.join(table_path, "tb_metadata.msg")
-        if not os.path.exists(table_meta_path):
-            return  # No data to load
+        if os.path.exists(table_meta_path):
+            with open(table_meta_path, "rb") as f:
+                metadata = msgpack.unpackb(f.read(), raw=False)
 
-        # Load Page Directory and rebuild them
+            table.num_columns = metadata["num_columns"]
+            table.key = metadata["key"]
 
         # Iterate over the Page Directory and rebuild the Index via Insertion
+        for x in range(table.num_columns):
+            table.index.create_index(x)
+
+        # Load Page Directory and rebuild them
+        page_directory_path = os.path.join(table_path, "pg_directory")
+        if os.path.exists(page_directory_path):
+            with open(page_directory_path, "rb") as f:
+                pg_data = msgpack.unpackb(f.read(), raw=False)
+
+            for rid_list, columns in zip(pg_data["data"], pg_data["rid"]):
+                    rid = tuple(rid_list)  
+                    key = columns[table.key]
+                    record = columns
+                    table.page_directory[rid] = record
+
+                    table.index.insert(key, rid)
+
+        
 
     # Need to implement later
     def save_table_data(self, table):
@@ -169,8 +179,6 @@ class Database:
         }
         with open(os.path.join(table_path, "tb_metadata.msg"), "wb") as f:
             f.write(msgpack.packb(metadata, use_bin_type=True))
-
-        # Should also serialize index and page directory
 
         # Save each page range
         for pr_index, page_range in enumerate(table.page_ranges):
@@ -200,8 +208,8 @@ class Database:
         # Save Page Directory
         pg = {"rid": [], "data": []}
         for key, value in table.page_directory.items():
-            pg["data"].append(key)
-            pg["rid"].append(value.columns)
+            pg["rid"].append(key)
+            pg["data"].append(value.columns)
         
         with open(os.path.join(table_path, "pg_directory.msg"), "wb") as f:
             f.write(msgpack.packb(pg, use_bin_type=True))
