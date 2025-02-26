@@ -278,7 +278,7 @@ class Table:
 
     def merge(self):
         with self.lock:
-            print("<----merging---->")
+            # print("<----merging---->")
             for page_range in self.page_ranges:
                 merged_base_pages = []
                 for base_page in page_range.base_pages:
