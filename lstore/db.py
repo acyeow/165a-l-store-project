@@ -2,7 +2,7 @@ import os
 import msgpack
 from lstore.config import BUFFERPOOL_SIZE
 from lstore.config import PAGE_SIZE
-from lstore.table import Table
+from lstore.table import Table, Record
 import datetime
 
 
@@ -145,15 +145,15 @@ class Database:
             table.index.create_index(x)
 
         # Load Page Directory and rebuild them
-        page_directory_path = os.path.join(table_path, "pg_directory")
+        page_directory_path = os.path.join(table_path, "pg_directory.msg")
         if os.path.exists(page_directory_path):
             with open(page_directory_path, "rb") as f:
                 pg_data = msgpack.unpackb(f.read(), raw=False)
 
-            for rid_list, columns in zip(pg_data["data"], pg_data["rid"]):
-                    rid = tuple(rid_list)  
+            for rid_str, columns in zip(pg_data["rid"], pg_data["data"]):
+                    rid = tuple(rid_str)  
                     key = columns[table.key]
-                    record = columns
+                    record = Record(rid, key, columns)
                     table.page_directory[rid] = record
 
                     table.index.insert(key, rid)
