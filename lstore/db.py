@@ -162,57 +162,52 @@ class Database:
 
     # Need to implement later
     def save_table_data(self, table):
-        # Set up file structure .../table/page_ranges/
         table_path = os.path.join(self.path, table.name)
-        page_ranges_path = os.path.join(table_path, "page_ranges")
-        os.makedirs(page_ranges_path, exist_ok=True)
+        os.makedirs(table_path, exist_ok=True)
 
-        # Contains the metadata of the specific table
-        # Save table metadata in .../table/
         metadata = {
             "name": table.name,
             "num_columns": table.num_columns,
             "key": table.key,
-            # planning on saving the page ranges as individual files to store the data
-            # this should help verify that the amount of data matches the given metadata
-            "page_range_count": len(table.page_ranges),
+            "num_pages": sum(len(pr.base_pages) + len(pr.tail_pages) for pr in table.page_ranges),
         }
+
+        # Save table metadata
         with open(os.path.join(table_path, "tb_metadata.msg"), "wb") as f:
             f.write(msgpack.packb(metadata, use_bin_type=True))
 
-        # Save each page range
-        for pr_index, page_range in enumerate(table.page_ranges):
-            pr_data = {"base_pages": [], "tail_pages": []}
+        # Save each page separately
+        for pr_idx, page_range in enumerate(table.page_ranges):
+            for page_idx, page in enumerate(page_range.base_pages):
+                page_id = f"base_{pr_idx}_{page_idx}"
+                self.save_page(table, page, page_id)
 
-            # Helper function to serialize a page
-            def serialize_page(page, page_type):
-                return {
-                    "columns": [col.data for col in page.pages],
-                    "page_type": page_type,
-                    "tps": page.tps if hasattr(page, "tps") else None,
-                }
+            for page_idx, page in enumerate(page_range.tail_pages):
+                page_id = f"tail_{pr_idx}_{page_idx}"
+                self.save_page(table, page, page_id)
 
-            # Serialize base pages
-            for base_page in page_range.base_pages:
-                pr_data["base_pages"].append(serialize_page(base_page, "base"))
-
-            # Serialize tail pages
-            for tail_page in page_range.tail_pages:
-                pr_data["tail_pages"].append(serialize_page(tail_page, "tail"))
-
-        # Save page range to file
-        pr_file_path = os.path.join(page_ranges_path, f"page_range_{pr_index}.msg")
-        with open(pr_file_path, "wb") as f:
-            f.write(msgpack.packb(pr_data, use_bin_type=True))
-
-        # Save Page Directory
-        pg = {"rid": [], "data": []}
-        for key, value in table.page_directory.items():
-            pg["rid"].append(key)
-            pg["data"].append(value.columns)
-        
+        # Save page directory separately
+        pg_directory = {
+            "rid": list(table.page_directory.keys()),
+            "data": [record.columns for record in table.page_directory.values()]
+        }
         with open(os.path.join(table_path, "pg_directory.msg"), "wb") as f:
-            f.write(msgpack.packb(pg, use_bin_type=True))
+            f.write(msgpack.packb(pg_directory, use_bin_type=True))
+
+
+    def save_page(self, table, page, page_id):
+        """Helper function to save a single page."""
+        table_path = os.path.join(self.path, table.name)
+        page_path = os.path.join(table_path, f"{page_id}.msg")
+
+        page_data = {
+            "columns": [col.data for col in page.pages],
+            "tps": getattr(page, "tps", None),
+        }
+
+        with open(page_path, "wb") as f:
+            f.write(msgpack.packb(page_data, use_bin_type=True))
+
 
 
 class Bufferpool:
