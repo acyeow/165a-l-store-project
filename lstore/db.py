@@ -3,7 +3,7 @@ import msgpack
 from lstore.config import BUFFERPOOL_SIZE
 from lstore.config import PAGE_SIZE
 from lstore.table import Table, Record
-import datetime
+from datetime import datetime
 
 
 class Database:
@@ -15,32 +15,31 @@ class Database:
 
     def open(self, path):
         """
-        Opens the database from the specified path.
-        If the database does not exist, it initializes an empty database.
+        Opens the database at the specified path.
         """
         self.path = path
 
         # Create the directory if it doesn't exist
         if not os.path.exists(path):
             os.makedirs(path)
-            return
 
+        # Initialize the bufferpool
         self.bufferpool = Bufferpool(self.bufferpool_size, self.path)
 
-        # Load the database metadata (list of tables) / USING MSG INSTEAD OF PICKLE
+        # Load database metadata if it exists
         metadata_path = os.path.join(path, "db_metadata.msg")
         if os.path.exists(metadata_path):
             with open(metadata_path, "rb") as f:
                 table_metadata = msgpack.unpackb(f.read(), raw=False)
 
-            # Reconstruct tables from metadata
+            # Recreate tables from metadata
             for table_info in table_metadata:
                 name = table_info["name"]
+                table = self.create_table(
+                    name, table_info["num_columns"], table_info["key"]
+                )
 
-                # Create a new table
-                table = self.create_table(name, table_info["num_columns"], table_info["key"])
-                
-                # Load table data from disk if the directory exists
+                # Load table data if the directory exists
                 table_path = os.path.join(path, name)
                 if os.path.exists(table_path):
                     self.load_table_data(table, table_info)
@@ -52,7 +51,7 @@ class Database:
         if not self.path:
             raise Exception("Database is not open")
 
-        # Contains the metadata of each table in the database
+        # Save table metadata and data
         table_metadata = []
         for table in self.tables:
             table_info = {
@@ -63,15 +62,16 @@ class Database:
             table_metadata.append(table_info)
             self.save_table_data(table)
 
-        # Save table metadata / USING MSG INSTEAD OF PICKLE
+        # Save database metadata
         metadata_path = os.path.join(self.path, "db_metadata.msg")
         with open(metadata_path, "wb") as f:
             f.write(msgpack.packb(table_metadata, use_bin_type=True))
 
-        # Clear in-memory state
+        # Flush all bufferpool pages to disk
         if self.bufferpool:
             self.bufferpool.reset()
 
+        # Clear in-memory state
         self.tables = []
         self.path = None
         self.bufferpool = None
@@ -84,13 +84,21 @@ class Database:
     """
 
     def create_table(self, name, num_columns, key):
+        # Check if the table already existsdef create_table(self, name, num_columns, key):
+        """
+        Creates a new table with a reference to the database.
+        """
         # Check if the table already exists
         for table in self.tables:
             if table.name == name:
                 raise Exception(f"Table {name} already exists")
 
-        # Create a new table and add it to the list of tables
+        # Create a new table
         table = Table(name, num_columns, key)
+
+        # Give the table a reference to this database
+        table.database = self
+
         self.tables.append(table)
         return table
 
@@ -151,14 +159,12 @@ class Database:
                 pg_data = msgpack.unpackb(f.read(), raw=False)
 
             for rid_str, columns in zip(pg_data["rid"], pg_data["data"]):
-                    rid = tuple(rid_str)  
-                    key = columns[table.key]
-                    record = Record(rid, key, columns)
-                    table.page_directory[rid] = record
+                rid = tuple(rid_str)
+                key = columns[table.key]
+                record = Record(rid, key, columns)
+                table.page_directory[rid] = record
 
-                    table.index.insert(key, rid)
-
-        
+                table.index.insert(key, rid)
 
     # Need to implement later
     def save_table_data(self, table):
@@ -169,7 +175,9 @@ class Database:
             "name": table.name,
             "num_columns": table.num_columns,
             "key": table.key,
-            "num_pages": sum(len(pr.base_pages) + len(pr.tail_pages) for pr in table.page_ranges),
+            "num_pages": sum(
+                len(pr.base_pages) + len(pr.tail_pages) for pr in table.page_ranges
+            ),
         }
 
         # Save table metadata
@@ -189,11 +197,10 @@ class Database:
         # Save page directory separately
         pg_directory = {
             "rid": list(table.page_directory.keys()),
-            "data": [record.columns for record in table.page_directory.values()]
+            "data": [record.columns for record in table.page_directory.values()],
         }
         with open(os.path.join(table_path, "pg_directory.msg"), "wb") as f:
             f.write(msgpack.packb(pg_directory, use_bin_type=True))
-
 
     def save_page(self, table, page, page_id):
         """Helper function to save a single page."""
@@ -209,140 +216,202 @@ class Database:
             f.write(msgpack.packb(page_data, use_bin_type=True))
 
 
-
 class Bufferpool:
     def __init__(self, size, path):
-        self.size = size # bufferpool size
-        self.path = path # database path
+        self.size = size  # maximum number of pages in memory
+        self.path = path  # database path
         self.pages = {}  # page_id -> (page_data, is_dirty)
         self.page_paths = {}  # page_id -> disk_path
-        self.pins = {} # page_id -> pins in place (int)
+        self.pins = {}  # page_id -> pin count
         self.access_times = {}  # page_id -> last_access_time
-        self.access_counter = 0
+        self.access_counter = 0  # counter for tracking access order
 
-    # Function for getting a page from the buffer pool and disk
-    def get_page(self, page_id, table_name):
-        # If page is in the bufferpool, access it and update access time and pin it
+    def get_page(self, page_id, table_name, num_columns=None):
+        """
+        Get a page from the bufferpool. If not in memory, load from disk.
+        Returns the page data and pins the page.
+        """
+        # If page is in bufferpool, access it and update access time
         if page_id in self.pages:
             self.access_counter += 1
             self.access_times[page_id] = self.access_counter
             self.pins[page_id] = self.pins.get(page_id, 0) + 1
-            return self.pages[page_id][0]  # Return page_data from (page_data, is_dirty)
+            return self.pages[page_id][0]  # Return page_data
 
-        # If the page is not in the bufferpool and we are at capacity, evict one page
-        if len(self.pages) >= self.size:
-            self.evict_page()
+        # If bufferpool is full, evict pages until space is available
+        while len(self.pages) >= self.size:
+            try:
+                self.evict_page()
+            except Exception:
+                # If no pages can be evicted, forcibly evict a page
+                if self.pages:
+                    # Find the page with the lowest pin count (even if it's 1)
+                    min_pin_page = min(self.pins, key=self.pins.get)
+                    self.write_dirty(min_pin_page, self.pages[min_pin_page][0])
+                    del self.pages[min_pin_page]
+                    del self.page_paths[min_pin_page]
+                    del self.pins[min_pin_page]
+                    del self.access_times[min_pin_page]
+                else:
+                    raise Exception("Cannot evict any pages from bufferpool")
 
         # Construct the disk file path
-        # Not too sure about this about the page path
-        page_path = os.path.join(self.path, table_name, f"page_{page_id}.msg")
+        page_path = self._construct_page_path(table_name, page_id)
         self.page_paths[page_id] = page_path
 
-        # Load the page from disk if it exists; otherwise create a new empty page
+        # Load page from disk if it exists, otherwise create empty page
         if os.path.exists(page_path):
-            with open(page_path, "rb") as f:
-                page_data = f.read()
+            try:
+                with open(page_path, "rb") as f:
+                    page_data = msgpack.unpackb(f.read(), raw=False)
+            except Exception as e:
+                print(f"Error reading page from disk: {e}")
+                page_data = self._create_empty_page(num_columns)
         else:
-            page_data = bytearray(PAGE_SIZE)
+            page_data = self._create_empty_page(num_columns)
 
-        # Insert the new page into the bufferpool.
-        self.pages[page_id] = (page_data, False)  # Set to not dirty
-        self.pins[page_id] = 1                    # Page is pinned upon loading
+        # Insert the page into the bufferpool
+        self.pages[page_id] = (page_data, False)  # Not dirty initially
+        self.pins[page_id] = 1  # Pin on load
         self.access_counter += 1
         self.access_times[page_id] = self.access_counter
 
         return page_data
 
+    def set_page(self, page_id, table_name, page_data, num_columns=None):
+        """
+        Update or insert a page in the bufferpool and mark it as dirty.
+        """
+        # If bufferpool is full, evict pages until space is available
+        while len(self.pages) >= self.size:
+            try:
+                self.evict_page()
+            except Exception:
+                # If no pages can be evicted, forcibly evict a page
+                if self.pages:
+                    # Find the page with the lowest pin count (even if it's 1)
+                    min_pin_page = min(self.pins, key=self.pins.get)
+                    self.write_dirty(min_pin_page, self.pages[min_pin_page][0])
+                    del self.pages[min_pin_page]
+                    del self.page_paths[min_pin_page]
+                    del self.pins[min_pin_page]
+                    del self.access_times[min_pin_page]
+                else:
+                    raise Exception("Cannot evict any pages from bufferpool")
 
-    def set_page(self, page_id, table_name, page_data):
-        # First check if page exists already in bufferpool. If true, update access_counter and pin it.
-
+        # Check if page exists in bufferpool
         if page_id in self.pages:
-            self.pages[page_id] = (page_data, True)
+            self.pages[page_id] = (page_data, True)  # Mark as dirty
             self.access_counter += 1
             self.access_times[page_id] = self.access_counter
             self.pins[page_id] = self.pins.get(page_id, 0) + 1
             return
 
-        # If bufferpool is full, evict LRU page
-        if len(self.pages) >= self.size:
-            self.evict_page()
-
-        page_path = os.path.join(self.path, table_name, f"{page_id}.msg")
+        # Construct page path and store it
+        page_path = self._construct_page_path(table_name, page_id)
         self.page_paths[page_id] = page_path
-        self.pages[page_id] = (page_data, True)
+
+        # Add page to bufferpool
+        self.pages[page_id] = (page_data, True)  # Mark as dirty
         self.pins[page_id] = 1
         self.access_counter += 1
         self.access_times[page_id] = self.access_counter
 
-    # Function for unpinning a page after done with it
-    def unpin_page(self, page_id):
-        # Decrement the pin count
-        # Can only evict if pin count == 0
-        if page_id in self.pins and self.pins[page_id] > 0:
-            self.pins[page_id] -= 1
-
-    # Function for evicting a page from the bufferpool using LRU
     def evict_page(self):
-        # Using LRU policy
-        # Checks if dirty, if True write to disk first
-        # Checks if page is pinned, if not remove from bufferpool
+        """
+        Evict the least recently used unpinned page.
+        If the page is dirty, write it to disk first.
+        """
+        # Find the least recently used unpinned page
         lru_page = None
-        oldest = None
-        for pid, access in self.access_times.items():
-            if self.pins.get(pid, 0) == 0:
-                if oldest is None or access < oldest:
-                    oldest = access
-                    lru_page = pid
+        oldest_access = float("inf")
+
+        for pid, access_time in self.access_times.items():
+            if self.pins.get(pid, 0) == 0 and access_time < oldest_access:
+                oldest_access = access_time
+                lru_page = pid
 
         if lru_page is None:
             raise Exception("No unpinned page available for eviction.")
 
-        # If the evict page is dirty, write it to disk
+        # If the page is dirty, write it to disk
         page_data, is_dirty = self.pages[lru_page]
         if is_dirty:
             self.write_dirty(lru_page, page_data)
 
-        # Remove the evict page from the bufferpool
+        # Remove the page from the bufferpool
         del self.pages[lru_page]
         del self.page_paths[lru_page]
         del self.pins[lru_page]
         del self.access_times[lru_page]
 
-    # Evicts all the pages from a table
-    # Call this in drop_table()
-    def evict_table(self, table_name):
-        evicts = [pid for pid, path in self.page_paths.items() if table_name in path]
-        for pid in evicts:
-            # Only evict pages that are not currently pinned
-            if self.pins.get(pid, 0) == 0:
-                page_data, is_dirty = self.pages[pid]
-                if is_dirty:
-                    self.write_dirty(pid, page_data)
-                del self.pages[pid]
-                del self.page_paths[pid]
-                del self.pins[pid]
-                del self.access_times[pid]
+    def unpin_page(self, page_id):
+        """
+        Decrement the pin count for a page.
+        The page can be evicted only when pin count is 0.
+        """
+        if page_id in self.pins and self.pins[page_id] > 0:
+            self.pins[page_id] -= 1
 
-    # Writes a dirty page back into disk
+    def _create_empty_page(self, num_columns):
+        """Create an empty page data structure with the expected format."""
+        return {
+            "columns": [[] for _ in range(num_columns)] if num_columns else [],
+            "indirection": [],
+            "rid": [],
+            "timestamp": [],
+            "schema_encoding": [],
+            "tps": None,
+        }
+
     def write_dirty(self, page_id, page_data):
+        """
+        Write a dirty page back to disk.
+        """
         if page_id in self.page_paths:
             path = self.page_paths[page_id]
+            # Ensure directory exists
             os.makedirs(os.path.dirname(path), exist_ok=True)
+
+            # Serialize and write data
             with open(path, "wb") as f:
-                f.write(page_data)
-            # Mark the page as clean (not dirty)
+                f.write(msgpack.packb(page_data, use_bin_type=True))
+
+            # Mark page as clean
             if page_id in self.pages:
                 self.pages[page_id] = (page_data, False)
 
-    # Write all dirty pages back into disk and evict all pages (flush)
     def reset(self):
-        for pid in list(self.pages.keys()):
-            page_data, is_dirty = self.pages[pid]
+        """
+        Write all dirty pages to disk and clear the bufferpool.
+        """
+        for pid, (page_data, is_dirty) in self.pages.items():
             if is_dirty:
                 self.write_dirty(pid, page_data)
+
+        # Clear all bufferpool data structures
         self.pages.clear()
         self.page_paths.clear()
         self.pins.clear()
         self.access_times.clear()
         self.access_counter = 0
+
+    def _construct_page_path(self, table_name, page_id):
+        """
+        Standardize page path construction.
+        """
+        # Create a structured path for different page types
+        if isinstance(page_id, tuple):
+            # Handle structured page IDs (e.g., (range_id, page_type, page_num))
+            page_type = page_id[0]
+            if page_type == "base":
+                return os.path.join(
+                    self.path, table_name, f"base_{page_id[1]}_{page_id[2]}.msg"
+                )
+            elif page_type == "tail":
+                return os.path.join(
+                    self.path, table_name, f"tail_{page_id[1]}_{page_id[2]}.msg"
+                )
+
+        # Default case for simple page IDs
+        return os.path.join(self.path, table_name, f"{page_id}.msg")
