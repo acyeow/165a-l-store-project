@@ -129,22 +129,23 @@ class Query:
         """
         Helper to get the latest version of a record by following indirection.
         """
+        # Get pages from bufferpool
         page_range_idx, page_idx, record_idx, page_type = rid
+        base_page_id = ("base", page_range_idx, page_idx)
+        base_page_data = self.table.database.bufferpool.get_page(base_page_id, self.table.name, self.table.num_columns)
 
+        # Follow indirection until latest version of a record and return if not empty
         try:
-            # Get indirection from the base page
-            page_range = self.table.page_ranges[page_range_idx]
-            base_page = page_range.base_pages[page_idx]
+            if record_idx < len(base_page_data["indirection"]):
+                latest_rid = base_page_data["indirection"][record_idx]
+            return latest_rid if latest_rid != ["empty"] else rid
+        finally:
+            # unpin the page no matter what
+            self.table.database.bufferpool.unpin_page(base_page_id)
 
-            # Check if there's a valid indirection pointer
-            if record_idx < len(base_page.indirection):
-                latest_rid = base_page.indirection[record_idx]
-                return latest_rid
-        except Exception as e:
-            print(f"Error getting latest version: {e}")
-
-        # Return the original RID if anything went wrong
+        # return the rid if anything went wrong
         return rid
+
 
     """
     # Read matching record with specified search key
@@ -521,7 +522,8 @@ class Query:
 
         try:
             page_range = self.table.page_ranges[page_range_idx]
-            base_page = page_range.base_pages[page_idx]
+            base_page_id = ("base", page_range_idx, page_idx)
+            base_page_data = self.table.database.bufferpool.get_page(base_page_id, self.table.name, self.table.num_columns)
 
             # Get the current record for reference
             current_record = self.table.page_directory[rid]
@@ -543,7 +545,20 @@ class Query:
                 page_range.add_tail_page(self.table.num_columns)
 
             tail_page_idx = len(page_range.tail_pages) - 1
-            tail_page = page_range.tail_pages[tail_page_idx]
+            tail_page_id = ("tail", page_range_idx, tail_page_idx)
+            tail_page_data = self.table.database.bufferpool.get_page(tail_page_id, self.table.name, self.table.num_columns)
+
+
+            if "columns" not in tail_page_data:
+                tail_page_data["columns"] = [[] for _ in range(self.table.num_columns)]
+            if "indirection" not in tail_page_data:
+                tail_page_data["indirection"] = []
+            if "rid" not in tail_page_data:
+                tail_page_data["rid"] = []
+            if "timestamp" not in tail_page_data:
+                tail_page_data["timestamp"] = []
+            if "schema_encoding" not in tail_page_data:
+                tail_page_data["schema_encoding"] = []
 
             # Create a schema encoding for the update
             schema = ["0"] * self.table.num_columns
@@ -556,7 +571,7 @@ class Query:
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
             # Create a new tail record
-            tail_rid = (page_range_idx, tail_page_idx, tail_page.num_records, "t")
+            tail_rid = (page_range_idx, tail_page_idx, len(tail_page_data["rid"]), "t")
 
             # Copy column values to tail page, respecting the update
             tail_page_columns = []
@@ -572,18 +587,25 @@ class Query:
                     )
 
             # Insert tail page record
-            tail_page.insert_tail_page_record(*tail_page_columns, record=current_record)
-            tail_page.start_time.append(timestamp)
-            tail_page.indirection.append(rid)
-            tail_page.schema_encoding.append(schema_str)
-            tail_page.rid.append(tail_rid)
+            for i, value in enumerate(tail_page_columns):
+                tail_page_data["columns"][i].append(value)
+            tail_page_data["indirection"].append(rid)
+            tail_page_data["rid"].append(tail_rid)
+            tail_page_data["timestamp"].append(timestamp)
+            tail_page_data["schema_encoding"].append(schema_str)
 
             # Update base page indirection to point to the new tail record
-            base_page.indirection[record_idx] = tail_rid
+            base_page_data["indirection"][record_idx] = tail_rid
+
+            self.table.database.bufferpool.set_page(tail_page_id, self.table.name, tail_page_data)
+            self.table.database.bufferpool.set_page(base_page_id, self.table.name, base_page_data)
 
             # Update page directory with new record
             new_record = Record(tail_rid, primary_key, tail_page_columns)
             self.table.page_directory[tail_rid] = new_record
+
+            self.table.database.bufferpool.unpin_page(tail_page_id)
+            self.table.database.bufferpool.unpin_page(base_page_id)
 
             # Increment merge counter
             self.table.merge_counter += 1
