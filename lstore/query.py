@@ -509,46 +509,47 @@ class Query:
     def update(self, primary_key, *columns):
         """
         Update a record based on its primary key.
+        Returns True if update is successful, False if no record exists or is locked.
         """
         # Get the RID of the record
         rids = self.table.index.locate(self.table.key, primary_key)
         if not rids:
             return False
 
-        rid = rids[0]
-
-        # Extract page and record information
-        page_range_idx, page_idx, record_idx, page_type = rid
+        # Extract base RID components
+        base_rid = rids[0]
+        page_range_idx, page_idx, record_idx, page_type = base_rid
 
         try:
+            # Access the relevant page range and base page data from bufferpool
             page_range = self.table.page_ranges[page_range_idx]
             base_page_id = ("base", page_range_idx, page_idx)
             base_page_data = self.table.database.bufferpool.get_page(base_page_id, self.table.name, self.table.num_columns)
 
-            # Get the current record for reference
-            current_record = self.table.page_directory[rid]
+            # Get the RID of the record
+            latest_rid = self._get_latest_version(base_rid)
+            current_record = self.table.page_directory[latest_rid]
 
-            # Prepare columns for update
+            # Prepare updated columns, retaining unchanged values
             updated_columns = list(current_record.columns)
             for i, col in enumerate(columns):
                 if col is not None:
-                    # Extend the list if needed
                     while i >= len(updated_columns):
                         updated_columns.append(0)
                     updated_columns[i] = col
 
             # Create a tail page if needed
             if (
-                not page_range.tail_pages
-                or not page_range.tail_pages[-1].has_capacity()
+                    not page_range.tail_pages
+                    or not page_range.tail_pages[-1].has_capacity()
             ):
                 page_range.add_tail_page(self.table.num_columns)
-
             tail_page_idx = len(page_range.tail_pages) - 1
             tail_page_id = ("tail", page_range_idx, tail_page_idx)
             tail_page_data = self.table.database.bufferpool.get_page(tail_page_id, self.table.name, self.table.num_columns)
+            tail_page = page_range.tail_pages[tail_page_idx]  # In-memory tail page
 
-
+            # Initialize tail page data structures if missing
             if "columns" not in tail_page_data:
                 tail_page_data["columns"] = [[] for _ in range(self.table.num_columns)]
             if "indirection" not in tail_page_data:
@@ -566,44 +567,43 @@ class Query:
                 if col is not None:
                     schema[i] = "1"
             schema_str = "".join(schema)
-
-            # Get the current timestamp
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
-            # Create a new tail record
+            # Create new tail RID
             tail_rid = (page_range_idx, tail_page_idx, len(tail_page_data["rid"]), "t")
 
-            # Copy column values to tail page, respecting the update
+            # Prepare tail page columns, merging new and existing values
             tail_page_columns = []
             for i in range(self.table.num_columns):
                 if i < len(columns) and columns[i] is not None:
                     tail_page_columns.append(columns[i])
                 else:
-                    # Use the existing record's value
-                    tail_page_columns.append(
-                        current_record.columns[i]
-                        if i < len(current_record.columns)
-                        else 0
-                    )
+                    tail_page_columns.append(current_record.columns[i] if i < len(current_record.columns) else 0)
 
-            # Insert tail page record
+            # Update tail page data (bufferpool) and in-memory page
             for i, value in enumerate(tail_page_columns):
                 tail_page_data["columns"][i].append(value)
-            tail_page_data["indirection"].append(rid)
+                tail_page.pages[i].write(value)  # Sync in-memory page
+            tail_page_data["indirection"].append(latest_rid)
             tail_page_data["rid"].append(tail_rid)
             tail_page_data["timestamp"].append(timestamp)
             tail_page_data["schema_encoding"].append(schema_str)
+            tail_page.indirection.append(latest_rid)  # Sync in-memory indirection
+            tail_page.rid.append(tail_rid)
+            tail_page.start_time.append(timestamp)
+            tail_page.schema_encoding.append(schema_str)
+            tail_page.num_records += 1
 
             # Update base page indirection to point to the new tail record
             base_page_data["indirection"][record_idx] = tail_rid
-
-            self.table.database.bufferpool.set_page(tail_page_id, self.table.name, tail_page_data)
             self.table.database.bufferpool.set_page(base_page_id, self.table.name, base_page_data)
+            self.table.database.bufferpool.set_page(tail_page_id, self.table.name, tail_page_data)
 
             # Update page directory with new record
             new_record = Record(tail_rid, primary_key, tail_page_columns)
             self.table.page_directory[tail_rid] = new_record
 
+            # Clean up bufferpool pins
             self.table.database.bufferpool.unpin_page(tail_page_id)
             self.table.database.bufferpool.unpin_page(base_page_id)
 
@@ -615,7 +615,6 @@ class Query:
 
             return True
         except Exception as e:
-            print(f"Error updating record: {e}")
             return False
 
     """

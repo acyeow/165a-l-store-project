@@ -98,28 +98,19 @@ class Table:
                 # Only include columns that are requested
                 try:
                     if (
-                        "columns" in page_data
-                        and i < len(page_data["columns"])
-                        and record_idx < len(page_data["columns"][i])
+                            "columns" in page_data
+                            and i < len(page_data["columns"])
+                            and record_idx < len(page_data["columns"][i])
                     ):
+                        # Append the value from the specified column at the record index
                         values.append(page_data["columns"][i][record_idx])
                     else:
-                        # If the column data doesn't exist in the bufferpool page, try direct access
-                        page_obj = (
-                            self.page_ranges[page_range_idx].base_pages[page_idx]
-                            if is_base_page
-                            else self.page_ranges[page_range_idx].tail_pages[page_idx]
-                        )
-                        if (
-                            i < len(page_obj.pages)
-                            and record_idx < page_obj.pages[i].num_records
-                        ):
-                            values.append(page_obj.pages[i].read(record_idx, 1)[0])
-                        else:
-                            values.append(0)  # Default value if not found
+                        # Default to 0 if column data is missing or index is out of bounds
+                        values.append(0)
                 except Exception as e:
+                    # Handle any errors, defaulting to 0
                     print(f"Error reading column {i} value: {e}")
-                    values.append(0)  # Default value on error
+                    values.append(0)
 
         # Unpin the page when done
         self.database.bufferpool.unpin_page(page_identifier)
@@ -212,12 +203,12 @@ class Table:
             return False
         rid = rid[0]
 
-        # Check if the updated values lead to duplicate primary key, if so return False
+        # Check if the updated values lead to duplicate primary key
         if columns[self.key] is not None and columns[self.key] != primary_key:
             if self.index.locate(self.key, columns[self.key]):
                 return False
 
-        # Unpack the RID data
+        # Extract page and record information
         page_range_index, page_index, record_index, _ = rid
 
         # Ensure the indices are valid

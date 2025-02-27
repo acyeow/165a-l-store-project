@@ -1,7 +1,6 @@
 import os
 import msgpack
-from lstore.config import BUFFERPOOL_SIZE
-from lstore.config import PAGE_SIZE
+from lstore.config import BUFFERPOOL_SIZE, MAX_BASE_PAGES, RECORDS_PER_PAGE, PAGE_SIZE
 from lstore.table import Table, Record
 from datetime import datetime
 
@@ -129,26 +128,56 @@ class Database:
 
     # Need to implement later
     def load_table_data(self, table, table_info):
-        """
-        Loads a table's data from disk.
-        """
         table_path = os.path.join(self.path, table.name)
-
-        # Create table directory if it doesn't exist
         if not os.path.exists(table_path):
             os.makedirs(table_path)
-            return  # New table, nothing to load
+            return
 
         # Load table metadata
         table_meta_path = os.path.join(table_path, "tb_metadata.msg")
         if os.path.exists(table_meta_path):
             with open(table_meta_path, "rb") as f:
                 metadata = msgpack.unpackb(f.read(), raw=False)
-
             table.num_columns = metadata["num_columns"]
             table.key = metadata["key"]
+        else:
+            return
 
-        # Iterate over the Page Directory and rebuild the Index via Insertion
+        # Calculate number of page ranges
+        num_pages = metadata.get("num_pages", 0)
+        page_range_count = (num_pages + MAX_BASE_PAGES - 1) // MAX_BASE_PAGES
+
+        # Initialize page ranges and load base page metadata
+        for pr_idx in range(page_range_count):
+            table.add_page_range(table.num_columns)
+            page_range = table.page_ranges[pr_idx]
+
+            # Load base page metadata
+            base_idx = 0
+            while True:
+                page_id = ("base", pr_idx, base_idx)
+                page_path = os.path.join(table_path, f"base_{pr_idx}_{base_idx}.msg")
+                if not os.path.exists(page_path):
+                    break
+                page_range.add_base_page(table.num_columns)
+                base_page = page_range.base_pages[base_idx]
+                page_data = self.bufferpool.get_page(page_id, table.name, table.num_columns)
+                # Pre-load metadata, not columns
+                base_page.indirection = page_data.get("indirection", [])
+                base_page.rid = page_data.get("rid", [None] * RECORDS_PER_PAGE)
+                base_page.start_time = page_data.get("timestamp", [])
+                base_page.schema_encoding = page_data.get("schema_encoding", [])
+                base_page.num_records = len(page_data["columns"][0]) if "columns" in page_data and page_data["columns"] else 0
+                self.bufferpool.unpin_page(page_id)
+                base_idx += 1
+
+            # Initialize tail pages as empty (load lazily)
+            tail_idx = 0
+            while os.path.exists(os.path.join(table_path, f"tail_{pr_idx}_{tail_idx}.msg")):
+                page_range.add_tail_page(table.num_columns)
+                tail_idx += 1
+
+        # Create indices for all columns
         for x in range(table.num_columns):
             table.index.create_index(x)
 
@@ -157,13 +186,11 @@ class Database:
         if os.path.exists(page_directory_path):
             with open(page_directory_path, "rb") as f:
                 pg_data = msgpack.unpackb(f.read(), raw=False)
-
             for rid_str, columns in zip(pg_data["rid"], pg_data["data"]):
                 rid = tuple(rid_str)
                 key = columns[table.key]
                 record = Record(rid, key, columns)
                 table.page_directory[rid] = record
-
                 table.index.insert(key, rid)
 
     # Need to implement later
@@ -209,6 +236,10 @@ class Database:
 
         page_data = {
             "columns": [col.data for col in page.pages],
+            "indirection": page.indirection,
+            "rid": page.rid,
+            "timestamp": page.start_time,
+            "schema_encoding": page.schema_encoding,
             "tps": getattr(page, "tps", None),
         }
 
