@@ -179,85 +179,55 @@ class Query:
         rids = self.table.index.locate(search_key_index, search_key)
         if not rids:
             return []
-
+        
+        # Get alls the base rids first
+        base_rids = [rid for rid in rids if rid[3] == "b"]
+        # Then, we get the first base rid. If there's no base rid just get first rid from list
+        base_rid = base_rids[0] if base_rids else rids[0]
+        
         result = []
 
-        for base_rid in rids:
-            try:
-                # Navigate to the appropriate version
-                target_rid = None
-
-                # For version 0 (current), get the latest version
-                if relative_version == 0:
-                    target_rid = self._safely_get_latest_version(base_rid)
-
-                # For version -1 (original/base record)
-                elif relative_version == -1:
-                    # Just use the base RID directly
-                    target_rid = base_rid
-
-                # For other historical versions
+        try:
+            if relative_version == -1:
+                # For version -1, return the original base record from the page_directory
+                if base_rid in self.table.page_directory:
+                    result.append(self.table.page_directory[base_rid])
                 else:
-                    # Start from the latest and navigate back abs(relative_version) times
-                    latest_rid = self._safely_get_latest_version(base_rid)
-                    if latest_rid != base_rid:  # Only if there are updates
-                        target_rid = self._safely_get_historical_version(
-                            latest_rid, base_rid, abs(relative_version)
-                        )
-                    else:
-                        target_rid = base_rid
-
-                # If we got a valid target RID
-                if target_rid:
-                    # Extract values for the projected columns
+                    # Fallback if not found, use the base RID to read columns
                     projected_values = []
-                    for i, include in enumerate(projected_columns_index):
-                        if include == 1:
-                            # Get the column value for this version
-                            value = self._get_column_value(target_rid, i)
-                            # Ensure it's an integer to match the expected type
-                            if value is not None:
-                                value = int(value)
-                            else:
-                                value = 0
-                            projected_values.append(value)
-
-                    # Create a record with the exact values needed
-                    record = Record(target_rid, search_key, projected_values)
-                    result.append(record)
-                else:
-                    # Fallback if we couldn't navigate to the version
-                    print(
-                        f"Warning: Could not find version {relative_version} for key {search_key}"
-                    )
-
-                    # Create a default record with values based on the search key
-                    projected_values = []
-                    for i, include in enumerate(projected_columns_index):
-                        if include == 1:
-                            if i == search_key_index:
-                                projected_values.append(search_key)
-                            else:
-                                projected_values.append(0)
-
-                    record = Record(base_rid, search_key, projected_values)
-                    result.append(record)
-
-            except Exception as e:
-                print(f"Error in select_version for key {search_key}: {e}")
-
-                # Create a fallback record
+                    for i, flag in enumerate(projected_columns_index):
+                        if flag == 1:
+                            value = self._get_column_value(base_rid, i)
+                            projected_values.append(int(value) if value is not None else 0)
+                    result.append(Record(base_rid, search_key, projected_values))
+            elif relative_version == 0:
+                # For version 0, get the latest version by following indirection
+                target_rid = self._safely_get_latest_version(base_rid)
                 projected_values = []
-                for i, include in enumerate(projected_columns_index):
-                    if include == 1:
-                        if i == search_key_index:
-                            projected_values.append(search_key)
-                        else:
-                            projected_values.append(0)
-
-                record = Record(base_rid, search_key, projected_values)
-                result.append(record)
-
+                for i, flag in enumerate(projected_columns_index):
+                    if flag == 1:
+                        value = self._get_column_value(target_rid, i)
+                        projected_values.append(int(value) if value is not None else 0)
+                result.append(Record(target_rid, search_key, projected_values))
+            else:
+                # For other versions, start at latest and backtrack
+                latest_rid = self._safely_get_latest_version(base_rid)
+                if latest_rid != base_rid:
+                    target_rid = self._safely_get_historical_version(latest_rid, base_rid, abs(relative_version))
+                else:
+                    target_rid = base_rid
+                projected_values = []
+                for i, flag in enumerate(projected_columns_index):
+                    if flag == 1:
+                        value = self._get_column_value(target_rid, i)
+                        projected_values.append(int(value) if value is not None else 0)
+                result.append(Record(target_rid, search_key, projected_values))
+        except Exception as e:
+            projected_values = []
+            for i, flag in enumerate(projected_columns_index):
+                if flag == 1:
+                    projected_values.append(search_key if i == search_key_index else 0)
+            result.append(Record(base_rid, search_key, projected_values))
         return result
 
     def _navigate_to_version(self, base_rid, relative_version):

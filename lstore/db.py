@@ -235,7 +235,7 @@ class Database:
         page_path = os.path.join(table_path, f"{page_id}.msg")
 
         page_data = {
-            "columns": [col.data for col in page.pages],
+            "columns": [col.read(0, col.num_records) for col in page.pages],
             "indirection": page.indirection,
             "rid": page.rid,
             "timestamp": page.start_time,
