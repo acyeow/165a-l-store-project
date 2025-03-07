@@ -1,16 +1,19 @@
 import os
 import msgpack
-from lstore.config import BUFFERPOOL_SIZE, MAX_BASE_PAGES, RECORDS_PER_PAGE, PAGE_SIZE
+from lstore.config import BUFFERPOOL_SIZE, MAX_BASE_PAGES, RECORDS_PER_PAGE, DEFAULT_DB_PATH
 from lstore.table import Table, Record
 from datetime import datetime
+
 
 
 class Database:
     def __init__(self):
         self.tables = []
-        self.path = None
+        self.path = DEFAULT_DB_PATH
         self.bufferpool = None
         self.bufferpool_size = BUFFERPOOL_SIZE
+        
+        self.open(DEFAULT_DB_PATH)
 
     def open(self, path):
         """
