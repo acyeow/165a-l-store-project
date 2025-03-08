@@ -130,21 +130,27 @@ class Query:
         Helper to get the latest version of a record by following indirection.
         """
         # Get pages from bufferpool
+        candidate = rid
         page_range_idx, page_idx, record_idx, page_type = rid
         base_page_id = ("base", page_range_idx, page_idx)
-        base_page_data = self.table.database.bufferpool.get_page(base_page_id, self.table.name, self.table.num_columns)
-
-        # Follow indirection until latest version of a record and return if not empty
         try:
-            if record_idx < len(base_page_data["indirection"]):
-                latest_rid = base_page_data["indirection"][record_idx]
-            return latest_rid if latest_rid != ["empty"] else rid
+            base_page_data = self.table.database.bufferpool.get_page(
+                base_page_id, self.table.name, self.table.num_columns
+            )
+            # Use the base RID as default
+            candidate = rid
+            indirections = base_page_data.get("indirection", [])
+            if record_idx < len(indirections):
+                temp = indirections[record_idx]
+                # If the pointer is None or marks deletion, keep the base RID
+                if temp is not None and temp != ["empty"]:
+                    candidate = temp
+            return candidate
+        except Exception as e:
+            print(f"Error in _get_latest_version: {e}")
+            return rid
         finally:
-            # unpin the page no matter what
-            self.table.database.bufferpool.unpin_page(base_page_id)
-
-        # return the rid if anything went wrong
-        return rid
+            self.table.database.bufferpool.unpin_page(base_page_id, self.table.name)
 
 
     """
@@ -173,85 +179,55 @@ class Query:
         rids = self.table.index.locate(search_key_index, search_key)
         if not rids:
             return []
-
+        
+        # Get alls the base rids first
+        base_rids = [rid for rid in rids if rid[3] == "b"]
+        # Then, we get the first base rid. If there's no base rid just get first rid from list
+        base_rid = base_rids[0] if base_rids else rids[0]
+        
         result = []
 
-        for base_rid in rids:
-            try:
-                # Navigate to the appropriate version
-                target_rid = None
-
-                # For version 0 (current), get the latest version
-                if relative_version == 0:
-                    target_rid = self._safely_get_latest_version(base_rid)
-
-                # For version -1 (original/base record)
-                elif relative_version == -1:
-                    # Just use the base RID directly
-                    target_rid = base_rid
-
-                # For other historical versions
+        try:
+            if relative_version == -1:
+                # For version -1, return the original base record from the page_directory
+                if base_rid in self.table.page_directory:
+                    result.append(self.table.page_directory[base_rid])
                 else:
-                    # Start from the latest and navigate back abs(relative_version) times
-                    latest_rid = self._safely_get_latest_version(base_rid)
-                    if latest_rid != base_rid:  # Only if there are updates
-                        target_rid = self._safely_get_historical_version(
-                            latest_rid, base_rid, abs(relative_version)
-                        )
-                    else:
-                        target_rid = base_rid
-
-                # If we got a valid target RID
-                if target_rid:
-                    # Extract values for the projected columns
+                    # Fallback if not found, use the base RID to read columns
                     projected_values = []
-                    for i, include in enumerate(projected_columns_index):
-                        if include == 1:
-                            # Get the column value for this version
-                            value = self._get_column_value(target_rid, i)
-                            # Ensure it's an integer to match the expected type
-                            if value is not None:
-                                value = int(value)
-                            else:
-                                value = 0
-                            projected_values.append(value)
-
-                    # Create a record with the exact values needed
-                    record = Record(target_rid, search_key, projected_values)
-                    result.append(record)
-                else:
-                    # Fallback if we couldn't navigate to the version
-                    print(
-                        f"Warning: Could not find version {relative_version} for key {search_key}"
-                    )
-
-                    # Create a default record with values based on the search key
-                    projected_values = []
-                    for i, include in enumerate(projected_columns_index):
-                        if include == 1:
-                            if i == search_key_index:
-                                projected_values.append(search_key)
-                            else:
-                                projected_values.append(0)
-
-                    record = Record(base_rid, search_key, projected_values)
-                    result.append(record)
-
-            except Exception as e:
-                print(f"Error in select_version for key {search_key}: {e}")
-
-                # Create a fallback record
+                    for i, flag in enumerate(projected_columns_index):
+                        if flag == 1:
+                            value = self._get_column_value(base_rid, i)
+                            projected_values.append(int(value) if value is not None else 0)
+                    result.append(Record(base_rid, search_key, projected_values))
+            elif relative_version == 0:
+                # For version 0, get the latest version by following indirection
+                target_rid = self._safely_get_latest_version(base_rid)
                 projected_values = []
-                for i, include in enumerate(projected_columns_index):
-                    if include == 1:
-                        if i == search_key_index:
-                            projected_values.append(search_key)
-                        else:
-                            projected_values.append(0)
-
-                record = Record(base_rid, search_key, projected_values)
-                result.append(record)
-
+                for i, flag in enumerate(projected_columns_index):
+                    if flag == 1:
+                        value = self._get_column_value(target_rid, i)
+                        projected_values.append(int(value) if value is not None else 0)
+                result.append(Record(target_rid, search_key, projected_values))
+            else:
+                # For other versions, start at latest and backtrack
+                latest_rid = self._safely_get_latest_version(base_rid)
+                if latest_rid != base_rid:
+                    target_rid = self._safely_get_historical_version(latest_rid, base_rid, abs(relative_version))
+                else:
+                    target_rid = base_rid
+                projected_values = []
+                for i, flag in enumerate(projected_columns_index):
+                    if flag == 1:
+                        value = self._get_column_value(target_rid, i)
+                        projected_values.append(int(value) if value is not None else 0)
+                result.append(Record(target_rid, search_key, projected_values))
+        except Exception as e:
+            projected_values = []
+            for i, flag in enumerate(projected_columns_index):
+                if flag == 1:
+                    projected_values.append(search_key if i == search_key_index else 0)
+            result.append(Record(base_rid, search_key, projected_values))
         return result
 
     def _navigate_to_version(self, base_rid, relative_version):
@@ -474,11 +450,11 @@ class Query:
                 and record_idx < len(page_data["columns"][column_index])
             ):
                 value = page_data["columns"][column_index][record_idx]
-                self.table.database.bufferpool.unpin_page(page_identifier)
+                self.table.database.bufferpool.unpin_page(page_identifier, self.table.name)
                 # Ensure it's returned as an integer
                 return int(value) if value is not None else 0
 
-            self.table.database.bufferpool.unpin_page(page_identifier)
+            self.table.database.bufferpool.unpin_page(page_identifier, self.table.name)
 
             # Fall back to direct access
             page_range = self.table.page_ranges[page_range_idx]
@@ -600,12 +576,22 @@ class Query:
             self.table.database.bufferpool.set_page(tail_page_id, self.table.name, tail_page_data)
 
             # Update page directory with new record
+            # Determine new key if primary key is updated; otherwise keep the old key
+            new_key = columns[self.table.key] if (columns[self.table.key] is not None and columns[self.table.key] != primary_key) else primary_key
             new_record = Record(tail_rid, primary_key, tail_page_columns)
             self.table.page_directory[tail_rid] = new_record
 
+            # If the primary key changed, remove the old record from the page directory and update the index
+            if new_key != primary_key:
+                if latest_rid in self.table.page_directory:
+                    del self.table.page_directory[latest_rid]
+                if self.table.index.indices.get(self.table.key) is not None:
+                    self.table.index.delete(primary_key, latest_rid)
+                    self.table.index.insert(new_key, tail_rid)
+                
             # Clean up bufferpool pins
-            self.table.database.bufferpool.unpin_page(tail_page_id)
-            self.table.database.bufferpool.unpin_page(base_page_id)
+            self.table.database.bufferpool.unpin_page(tail_page_id, self.table.name)
+            self.table.database.bufferpool.unpin_page(base_page_id, self.table.name)
 
             # Increment merge counter
             self.table.merge_counter += 1
@@ -640,38 +626,14 @@ class Query:
 
         for rid in rids:
             try:
-                # Get the base record details
-                page_range_idx, page_idx, record_idx, page_type = rid
-                page_range = self.table.page_ranges[page_range_idx]
-                base_page = page_range.base_pages[page_idx]
-
-                # Extract the key to check range and avoid duplicates
-                key_value = None
-                if (
-                    self.table.key < len(base_page.pages)
-                    and record_idx < base_page.pages[self.table.key].num_records
-                ):
-                    key_value = base_page.pages[self.table.key].read(record_idx, 1)[0]
-                else:
-                    # Try to get key from page directory
-                    record = self.table.page_directory.get(rid)
-                    if record:
-                        key_value = record.key
-
-                if (
-                    key_value is None
-                    or key_value < start_range
-                    or key_value > end_range
-                    or key_value in processed_keys
-                ):
-                    continue
-
-                processed_keys.add(key_value)
-
-                # Get the latest version through indirection
+                # Always get the latest version of the record
                 latest_rid = self._get_latest_version(rid)
-
-                # Get the value to sum
+                # Get the key value from the latest version
+                key_value = self._get_column_value(latest_rid, self.table.key)
+                if key_value is None or key_value < start_range or key_value > end_range or key_value in processed_keys:
+                    continue
+                processed_keys.add(key_value)
+                # Get the aggregate value from the latest version
                 value = self._get_column_value(latest_rid, aggregate_column_index)
                 if value is not None:
                     total_sum += value
@@ -700,10 +662,10 @@ class Query:
                 and record_idx < len(page_data["columns"][column_index])
             ):
                 value = page_data["columns"][column_index][record_idx]
-                self.table.database.bufferpool.unpin_page(page_identifier)
+                self.table.database.bufferpool.unpin_page(page_identifier, self.table.name)
                 return value
 
-            self.table.database.bufferpool.unpin_page(page_identifier)
+            self.table.database.bufferpool.unpin_page(page_identifier, self.table.name)
 
             # Fall back to direct access
             page_range = self.table.page_ranges[page_range_idx]

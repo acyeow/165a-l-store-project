@@ -113,7 +113,7 @@ class Table:
                     values.append(0)
 
         # Unpin the page when done
-        self.database.bufferpool.unpin_page(page_identifier)
+        self.database.bufferpool.unpin_page(page_identifier, self.name)
 
         # Create a record with the extracted values
         return Record(rid, key, values)
@@ -178,7 +178,7 @@ class Table:
         self.database.bufferpool.set_page(page_identifier, self.name, page_data)
 
         # Unpin the page
-        self.database.bufferpool.unpin_page(page_identifier)
+        self.database.bufferpool.unpin_page(page_identifier, self.name)
 
         # Update the base_page metadata
         base_page.num_records += 1
@@ -253,8 +253,8 @@ class Table:
 
         # Update the schema encoding
         for i in range(self.num_columns):
-            if tail_page.schema_encoding[new_record_index][i] == 1:
-                base_page.schema_encoding[record_index][i] = 1
+            if tail_page.schema_encoding[new_record_index][i] == "1":
+                base_page.schema_encoding[record_index][i] = "1"
 
         return True
 
@@ -400,7 +400,7 @@ class Table:
         value = page_data["columns"][column_id][record_id]
 
         # Unpin the page when done
-        self.database.bufferpool.unpin_page(page_identifier)
+        self.database.bufferpool.unpin_page(page_identifier, self.name)
 
         return value
 
@@ -444,4 +444,4 @@ class Table:
         self.database.bufferpool.set_page(page_identifier, self.name, page_data)
 
         # Unpin the page when done
-        self.database.bufferpool.unpin_page(page_identifier)
+        self.database.bufferpool.unpin_page(page_identifier, self.name)
