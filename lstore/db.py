@@ -2,7 +2,7 @@ import os
 import msgpack
 from lstore.config import BUFFERPOOL_SIZE, MAX_BASE_PAGES, RECORDS_PER_PAGE, DEFAULT_DB_PATH
 from lstore.table import Table, Record
-from datetime import datetime
+from threading import Lock
 
 
 
@@ -446,3 +446,15 @@ class Bufferpool:
 
         # Default case for simple page IDs
         return os.path.join(self.path, table_name, f"{page_id}.msg")
+
+
+class LockManager:
+    def __init__(self):
+        self.locks = {}  # record_id -> (lock_type, transaction_id)
+        self.mutex = Lock()
+
+    def acquire_lock(self):
+        # todo
+
+    def release_lock(self):
+        # todo
