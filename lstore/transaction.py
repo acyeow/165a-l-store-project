@@ -6,7 +6,7 @@ import os
 from threading import Lock
 
 class Transaction:
-    def __init__(self, transaction_id, buffer_pool, lock_manager):
+    def __init__(self, transaction_id=None, buffer_pool=None, lock_manager=None):
         self.transaction_id = transaction_id  # Unique ID for transaction
         self.queries = []  # List to store queries and their arguments
         self.rollback_operations = []  # List of tuples to store operations for rollback
@@ -18,6 +18,12 @@ class Transaction:
 
     def add_query(self, query, table, *args):
         with self.mutex:
+            # Dynamically fetch buffer pool and lock manager from table if not set
+            if self.buffer_pool is None and hasattr(table, 'database') and table.database is not None:
+                self.buffer_pool = table.database.bufferpool
+            if self.lock_manager is None and hasattr(table, 'database') and table.database is not None:
+                self.lock_manager = table.database.lock_manager
+
             # Store querying changes and its arguments as well as current state for potential rollback
             self.queries.append((query, table, args))
             if query.__name__ in ["update", "insert", "delete"]:
@@ -50,16 +56,26 @@ class Transaction:
 
     # Get the columns of a record given its primary key.
     def _get_record_columns(self, table, key):
+        if self.buffer_pool is None and hasattr(table, 'database') and table.database is not None:
+            self.buffer_pool = table.database.bufferpool
         rids = table.index.locate(table.key, key)
         if not rids or rids[0] not in table.page_directory:
             return None
-        base_location = table.page_directory[rids[0]]
-        page_id, slot = base_location
-        base_page = self.buffer_pool.get_page(page_id, table.name, table.num_columns)
-        return [base_page["columns"][i][slot] for i in range(table.num_columns)]
+        record = table.page_directory[rids[0]]
+        return record.columns
 
     def run(self):
         with self.mutex:
+            # Ensure buffer_pool and lock_manager are available
+            if not self.queries:
+                return False
+            if self.buffer_pool is None or self.lock_manager is None:
+                _, first_table, _ = self.queries[0]
+                if self.buffer_pool is None and hasattr(first_table, 'database'):
+                    self.buffer_pool = first_table.database.bufferpool
+                if self.lock_manager is None and hasattr(first_table, 'database'):
+                    self.lock_manager = first_table.database.lock_manager
+
             # Get locks, abort if fail
             for query, table, args in self.queries:
                 record_id = args[0]  # Assuming first argument is record ID
