@@ -12,7 +12,7 @@ class Database:
         self.path = DEFAULT_DB_PATH
         self.bufferpool = None
         self.bufferpool_size = BUFFERPOOL_SIZE
-        
+        self.lock_manager = LockManager()
         self.open(DEFAULT_DB_PATH)
 
     def open(self, path):

@@ -63,6 +63,9 @@ class Query:
             if rid in self.table.page_directory:
                 del self.table.page_directory[rid]
 
+            # Index too
+            self.table.index.delete(primary_key, rid)
+
             return True
 
         except Exception as e:
