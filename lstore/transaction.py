@@ -79,9 +79,11 @@ class Transaction:
             # Get locks, abort if fail
             for query, table, args in self.queries:
                 record_id = args[0]  # Assuming first argument is record ID
-                if not self.lock_manager.acquire_lock(self.transaction_id, record_id):
+                operation = query.__name__
+                if not self.lock_manager.acquire_lock(self.transaction_id, record_id, operation):
                     self.abort()
                     return False
+                self.locks_held.add(record_id)
 
             # Do queries, abort if fail
             for query, table, args in self.queries:
