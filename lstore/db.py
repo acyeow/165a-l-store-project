@@ -447,61 +447,87 @@ class Bufferpool:
         # Default case for simple page IDs
         return os.path.join(self.path, table_name, f"{page_id}.msg")
 
-
 class LockManager:
     def __init__(self):
-        self.locks = {}  # key: rid, value: tuple of (set of shared lock transaction ids, int of exclusive lock transaction id or None)
+        """
+        Initializes the LockManager.
+        - self.locks: A dictionary where the key is the record ID (rid) and the value is a tuple of:
+          - A set of transaction IDs holding shared locks.
+          - The transaction ID holding an exclusive lock (or None if no exclusive lock exists).
+        - self.mutex: A threading Lock to ensure thread-safe access to the locks dictionary.
+        """
+        self.locks = {}  # key: rid, value: (set of shared lock tids, exclusive lock tid or None)
         self.mutex = Lock()
 
-    # Lock setting, allows simultaneous reads
     def acquire_lock(self, transaction_id, record_id, operation):
+        """
+        Acquires a lock for a transaction on a specific record
+
+        Argumentss:
+            transaction_id (int): The ID of the transaction requesting the lock
+            record_id (int): The ID of the record to lock
+            operation (str): The type of operation ("read", "update", "insert", "delete")
+
+        Returns:
+            bool: True if the lock was acquired and False otherwise
+        """
         with self.mutex:
-            # Allow only simultaneous reads, not writes
+            # Determine the lock type based on the operation
             lock_type = "exclusive" if operation in ["update", "insert", "delete"] else "shared"
 
-            # Initialize lock state if record not locked
+            # Initialize lock state if the record is not already locked
             if record_id not in self.locks:
                 self.locks[record_id] = (set(), None)
 
             shared_lock_tids, exclusive_lock_tid = self.locks[record_id]
 
             if lock_type == "shared":
-                # Allow shared lock if no exclusive lock exists or if this transaction already has it
+                # Allow shared lock if no exclusive lock exists or if this transaction already holds the exclusive lock
                 if exclusive_lock_tid is None or exclusive_lock_tid == transaction_id:
                     shared_lock_tids.add(transaction_id)
-                    self.locks[record_id] = (shared_lock_tids, exclusive_lock_tid)
                     return True
                 return False
 
             elif lock_type == "exclusive":
-                # Allow exclusive lock if no other locks exist or if this transaction already has a lock
+                # Allow exclusive lock if:
+                # 1. No other locks exist, or
+                # 2. This transaction already holds the exclusive lock, or
+                # 3. This transaction holds the only shared lock and no exclusive lock exists
                 if (not shared_lock_tids and exclusive_lock_tid is None) or \
-                        (exclusive_lock_tid == transaction_id) or \
+                        exclusive_lock_tid == transaction_id or \
                         (shared_lock_tids == {transaction_id} and exclusive_lock_tid is None):
                     # Upgrade or set exclusive lock
                     self.locks[record_id] = (set(), transaction_id)
                     return True
                 return False
 
-    # Lock releasing
     def release_lock(self, transaction_id, record_id):
+        """
+        Releases a lock held by a transaction on a specific record
+
+        Arguments:
+            transaction_id (int): The ID of the transaction releasing the lock
+            record_id (int): The ID of the record to unlock
+        """
         with self.mutex:
-            # do nothing if lock state does not exist
+            # Do nothing if the record is not locked
             if record_id not in self.locks:
                 return
 
             shared_lock_tids, exclusive_lock_tid = self.locks[record_id]
 
-            # If this transaction holds a shared lock, remove it from the set
+            # Remove the transaction from the shared locks if it holds one
             if transaction_id in shared_lock_tids:
                 shared_lock_tids.remove(transaction_id)
 
-            # # If this transaction holds the exclusive lock, clear it
+            # Clear the exclusive lock if this transaction holds it
             if exclusive_lock_tid == transaction_id:
-                self.locks[record_id] = (shared_lock_tids, None)
+                exclusive_lock_tid = None
 
-            else:
-                self.locks[record_id] = (shared_lock_tids, exclusive_lock_tid)
+            # Update the lock state
+            self.locks[record_id] = (shared_lock_tids, exclusive_lock_tid)
 
+            # Clean up the lock entry if no locks remain
             if not shared_lock_tids and exclusive_lock_tid is None:
                 del self.locks[record_id]
+
