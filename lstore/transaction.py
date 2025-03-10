@@ -88,26 +88,26 @@ class Transaction:
     # If you choose to implement this differently this method must still return True if transaction commits or False on abort
     def run(self):
         print(f"TX{self.transaction_id}: Running {len(self.queries)} queries")
-
+        
         # Initialize transaction components
-        if not hasattr(self, "transaction_id") or self.transaction_id is None:
+        if not hasattr(self, 'transaction_id') or self.transaction_id is None:
             self.transaction_id = id(self)
-
+        
         if not self.queries:
             return False
-
+        
         # Get lock manager and initialize locks_held if needed
-        if not hasattr(self, "lock_manager") or self.lock_manager is None:
+        if not hasattr(self, 'lock_manager') or self.lock_manager is None:
             try:
                 query, table, args = self.queries[0]
-                if hasattr(table, "database") and table.database is not None:
+                if hasattr(table, 'database') and table.database is not None:
                     self.lock_manager = table.database.lock_manager
             except Exception as e:
                 print(f"TX{self.transaction_id}: Lock manager init error")
-
-        if not hasattr(self, "locks_held"):
+        
+        if not hasattr(self, 'locks_held'):
             self.locks_held = set()
-
+        
         try:
             # Execute all queries
             for query, table, args in self.queries:
@@ -119,7 +119,7 @@ class Transaction:
                 except Exception as e:
                     print(f"TX{self.transaction_id}: Query error: {str(e)[:50]}...")
                     return self.abort()
-
+            
             print(f"TX{self.transaction_id}: Committing")
             return self.commit()
         except Exception as e:

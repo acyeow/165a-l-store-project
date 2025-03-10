@@ -128,7 +128,7 @@ class Query:
         """
         # Get the RID of the record
         rids = self.table.index.locate(search_key_index, search_key)
-
+        
         if not rids:
             print(f"SELECT: No records for key={search_key}")
             # Check page directory directly as a fallback
@@ -136,7 +136,7 @@ class Query:
             for rid, record in self.table.page_directory.items():
                 if record.columns[search_key_index] == search_key:
                     matching_rids.append(rid)
-
+            
             if matching_rids:
                 print(f"SELECT: Found {len(matching_rids)} records in page_directory")
                 rids = matching_rids
@@ -147,14 +147,12 @@ class Query:
         for rid in rids:
             try:
                 latest_rid = self._get_latest_version(rid)
-                record = self.table.find_record(
-                    search_key, latest_rid, projected_columns_index
-                )
+                record = self.table.find_record(search_key, latest_rid, projected_columns_index)
                 if record:
                     result.append(record)
             except Exception as e:
                 print(f"SELECT: Error for key={search_key}")
-
+                
         if result:
             print(f"SELECT: Returned {len(result)} records for key={search_key}")
         return result

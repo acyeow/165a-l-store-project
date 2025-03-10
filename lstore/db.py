@@ -4,7 +4,7 @@ from lstore.config import BUFFERPOOL_SIZE
 from lstore.config import PAGE_SIZE
 from lstore.table import Table, Record
 from datetime import datetime
-from threading import Thread
+from threading import Lock
 
 class Database:
     def __init__(self):
