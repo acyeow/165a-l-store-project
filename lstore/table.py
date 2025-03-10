@@ -170,6 +170,7 @@ class Table:
         """
         Insert a record using the bufferpool for page access.
         """
+<<<<<<< Updated upstream
         # Get the current base page
         page_range, base_page = self.find_current_base_page()
         record_index = base_page.num_records  # Current index for the new record
@@ -246,72 +247,17 @@ class Table:
         return True
 =======
             # Determine page identifiers
+=======
+        try:
+            # Get the current base page and create RID
+            page_range, base_page = self.find_current_base_page()
+            record_index = base_page.num_records
+>>>>>>> Stashed changes
             page_range_id = self.page_ranges.index(page_range)
             page_id = page_range.base_pages.index(base_page)
-
-            # Create RID
             rid = (page_range_id, page_id, record_index, "b")
-
-            # Create page identifier for bufferpool
-            page_identifier = ("base", page_range_id, page_id)
-
-            # Get page from bufferpool
-            page_data = self.database.bufferpool.get_page(
-                page_identifier, self.name, self.num_columns
-            )
-
-            # Make sure the page has the expected structure
-            if "columns" not in page_data:
-                page_data["columns"] = [[] for _ in range(self.num_columns)]
-            if "indirection" not in page_data:
-                page_data["indirection"] = []
-            if "rid" not in page_data:
-                page_data["rid"] = []
-            if "timestamp" not in page_data:
-                page_data["timestamp"] = []
-            if "schema_encoding" not in page_data:
-                page_data["schema_encoding"] = []
-
-            # Insert record metadata
-            page_data["indirection"].append(rid)
-            page_data["rid"].append(rid)
-            page_data["timestamp"].append(start_time)
-            page_data["schema_encoding"].append(schema_encoding)
-
-            # Insert column values
-            for i, value in enumerate(columns):
-                # Make sure there are enough column lists
-                while i >= len(page_data["columns"]):
-                    page_data["columns"].append([])
-
-                # Add the value to the appropriate column
-                page_data["columns"][i].append(value)
-
-                # Also insert into the direct page (for consistency)
-                try:
-                    base_page.pages[i].write(value)
-                except Exception as e:
-                    print(f"Warning: Failed to write to direct page: {e}")
-
-            # Update the page in the bufferpool
-            self.database.bufferpool.set_page(page_identifier, self.name, page_data)
-
-            # Unpin the page
-            self.database.bufferpool.unpin_page(page_identifier, self.name)
-
-            # Update the base_page metadata
-            base_page.num_records += 1
-            base_page.indirection.append(rid)
-            base_page.schema_encoding.append(schema_encoding)
-            base_page.start_time.append(start_time)
-            base_page.rid.append(rid)
-
-            # Add to page directory
-            record = Record(rid, columns[self.key], list(columns))
-            self.page_directory[rid] = record
-
-            # Insert key to the index
             key = columns[self.key]
+<<<<<<< Updated upstream
             try:
         # Add to primary key index
                 self.index.insert(key, rid)
@@ -320,9 +266,25 @@ class Table:
             except Exception as e:
                 print(f"Error updating index on insert: {e}")
 
+=======
+            
+            # Get page from bufferpool and insert data
+            page_identifier = ("base", page_range_id, page_id)
+            page_data = self.database.bufferpool.get_page(page_identifier, self.name, self.num_columns)
+            
+            # [Insert record to page data and update bufferpool - no debug here]
+            
+            # Update metadata, page directory, and index
+            base_page.num_records += 1
+            record = Record(rid, key, list(columns))
+            self.page_directory[rid] = record
+            self.index.insert(key, rid)
+            
+            print(f"INSERT: key={key} rid={rid}")
+>>>>>>> Stashed changes
             return True
         except Exception as e:
-            print(f"Error in insert_record: {e}")
+            print(f"INSERT ERROR: key={columns[self.key]} - {str(e)[:50]}...")
             return False
 >>>>>>> Stashed changes
 
@@ -574,4 +536,50 @@ class Table:
         self.database.bufferpool.set_page(page_identifier, self.name, page_data)
 
         # Unpin the page when done
+<<<<<<< Updated upstream
         self.database.bufferpool.unpin_page(page_identifier)
+=======
+        self.database.bufferpool.unpin_page(page_identifier, self.name)
+
+    def check_index_consistency(self):
+        """
+        Check the consistency between the index and page directory
+        """
+        index_count = 0
+        for column in range(self.num_columns):
+            if column < len(self.index.indices) and self.index.indices[column] is not None:
+                # Count records in the index
+                all_rids = []
+                node = self.index.indices[column].root
+                while not node.leaf:
+                    node = node.children[0]
+                while node:
+                    for _, rid in node.keys:
+                        all_rids.append(rid)
+                    node = node.next
+                
+                print(f"Column {column} index contains {len(all_rids)} records")
+                index_count = len(all_rids)
+                
+                # Check that all records in the index are in the page directory
+                missing = 0
+                for rid in all_rids:
+                    if rid not in self.page_directory:
+                        missing += 1
+                if missing > 0:
+                    print(f"Warning: {missing} records in index not found in page directory")
+        
+        # Count records in page directory
+        print(f"Page directory contains {len(self.page_directory)} records")
+        
+        # Check that all records in page directory are indexed
+        primary_index = self.index.indices[self.key]
+        if primary_index is not None:
+            missing = 0
+            for rid, record in self.page_directory.items():
+                # Check if record's primary key is in the index
+                if not primary_index.search(record.key):
+                    missing += 1
+            if missing > 0:
+                print(f"Warning: {missing} records in page directory not found in primary key index")
+>>>>>>> Stashed changes

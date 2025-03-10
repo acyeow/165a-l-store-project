@@ -18,12 +18,71 @@ class Transaction:
     # t.add_query(q.update, grades_table, 0, *[None, 1, None, 2, None])
     """
     def add_query(self, query, table, *args):
+<<<<<<< Updated upstream
         self.queries.append((query, args))
         # use grades_table for aborting
+=======
+        # Initialize transaction ID if not already done
+        if not hasattr(self, 'transaction_id') or self.transaction_id is None:
+            self.transaction_id = id(self)
+        
+        # Initialize locks_held if not already done
+        if not hasattr(self, 'locks_held'):
+            self.locks_held = set()
+            
+        # Get lock manager from table if not already set
+        if not hasattr(self, 'lock_manager') or self.lock_manager is None:
+            if hasattr(table, 'database') and table.database is not None:
+                self.lock_manager = table.database.lock_manager
+        
+        # Store the query and args
+        self.queries.append((query, table, args))
+        
+        # Store rollback information if needed
+        if hasattr(self, 'rollback_operations') and query.__name__ in ["update", "insert", "delete"]:
+            # Implement rollback operation storage
+            pass
+
+    # Helper function for possible rollback
+    def _get_rollback_operation(self, query, table, args):
+        # Store the operations
+        if query.__name__ == "insert":
+            return lambda key: Query(table).delete(key)
+        elif query.__name__ == "update":
+            return lambda key: self._restore_previous_version(table, key)
+        elif query.__name__ == "delete":
+            return lambda key: self._restore_deleted_record(table, key)
+        return lambda *args: None
+
+    # Helper function for update rollback
+    def _restore_previous_version(self, table, key):
+        with self.mutex:
+            columns = self._get_record_columns(table, key)
+            if columns is not None:
+                Query(table).update(key, *columns)
+
+
+    # Helper function for delete rollback
+    def _restore_deleted_record(self, table, key):
+        with self.mutex:
+            if key in self._deleted_records:
+                Query(table).insert(*self._deleted_records[key])
+
+    # Get the columns of a record given its primary key.
+    def _get_record_columns(self, table, key):
+        if self.buffer_pool is None and hasattr(table, 'database') and table.database is not None:
+            self.buffer_pool = table.database.bufferpool
+        rids = table.index.locate(table.key, key)
+        if not rids or rids[0] not in table.page_directory:
+            return None
+        record = table.page_directory[rids[0]]
+        return record.columns
+>>>>>>> Stashed changes
 
         
     # If you choose to implement this differently this method must still return True if transaction commits or False on abort
     def run(self):
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
         for query, args in self.queries:
             result = query(*args)
@@ -85,9 +144,50 @@ class Transaction:
                 self.abort()
                 return False
 >>>>>>> Stashed changes
+=======
+        print(f"TX{self.transaction_id}: Running {len(self.queries)} queries")
+        
+        # Initialize transaction components
+        if not hasattr(self, 'transaction_id') or self.transaction_id is None:
+            self.transaction_id = id(self)
+        
+        if not self.queries:
+            return False
+        
+        # Get lock manager and initialize locks_held if needed
+        if not hasattr(self, 'lock_manager') or self.lock_manager is None:
+            try:
+                query, table, args = self.queries[0]
+                if hasattr(table, 'database') and table.database is not None:
+                    self.lock_manager = table.database.lock_manager
+            except Exception as e:
+                print(f"TX{self.transaction_id}: Lock manager init error")
+        
+        if not hasattr(self, 'locks_held'):
+            self.locks_held = set()
+        
+        try:
+            # Execute all queries
+            for query, table, args in self.queries:
+                try:
+                    result = query(*args)
+                    if result is False:
+                        print(f"TX{self.transaction_id}: Query failed")
+                        return self.abort()
+                except Exception as e:
+                    print(f"TX{self.transaction_id}: Query error: {str(e)[:50]}...")
+                    return self.abort()
+            
+            print(f"TX{self.transaction_id}: Committing")
+            return self.commit()
+        except Exception as e:
+            print(f"TX{self.transaction_id}: Execution error")
+            return self.abort()
+>>>>>>> Stashed changes
 
     
     def abort(self):
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
         #TODO: do roll-back and any other necessary operations
 =======
@@ -126,23 +226,59 @@ class Transaction:
         Commit the transaction, making all changes permanent
         """
         print(f"Committing transaction {self.transaction_id}")
+=======
+        """
+        Abort the transaction and roll back any changes.
+        """
+        print(f"Aborting transaction {self.transaction_id}")
+        
+        # Release all locks
+        if hasattr(self, 'lock_manager') and self.lock_manager:
+            for record_id in self.locks_held:
+                try:
+                    self.lock_manager.release_lock(self.transaction_id, record_id)
+                except Exception as e:
+                    print(f"Error releasing lock on {record_id}: {e}")
+        
+        # Clear transaction state
+        self.queries = []
+        if hasattr(self, 'rollback_operations'):
+            self.rollback_operations = []
+        self.locks_held = set()
+        
+        return False
+    def commit(self):
+        """
+        Commit the transaction, making all changes permanent
+        """
+>>>>>>> Stashed changes
         try:
             # Release all locks
             if self.lock_manager:
                 for record_id in self.locks_held:
                     try:
                         self.lock_manager.release_lock(self.transaction_id, record_id)
+<<<<<<< Updated upstream
                         print(f"Released lock on record {record_id}")
+=======
+>>>>>>> Stashed changes
                     except Exception as e:
                         print(f"Error releasing lock on {record_id}: {e}")
         except Exception as e:
             print(f"Error releasing locks during commit: {e}")
+<<<<<<< Updated upstream
             
+=======
+                
+>>>>>>> Stashed changes
         # Clear transaction state
         self.queries.clear()
         self.rollback_operations.clear()
         self.locks_held.clear()
+<<<<<<< Updated upstream
         self._deleted_records.clear()
+=======
+>>>>>>> Stashed changes
         return True
 
     def _write_to_transaction_log(self):

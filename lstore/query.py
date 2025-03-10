@@ -76,16 +76,47 @@ class Query:
     """
 
     def insert(self, *columns):
+<<<<<<< Updated upstream
+=======
+        """
+        Insert a record with transaction awareness.
+        """
+        key = columns[self.table.key]
+        print(f"Insert attempt for key {key}")
+        
+        # If part of a transaction, acquire exclusive lock
+        if hasattr(self, 'transaction') and self.transaction and hasattr(self, 'lock_manager') and self.lock_manager:
+            if not self.lock_manager.acquire_lock(
+                self.transaction.transaction_id, key, "insert"
+            ):
+                print(f"Insert failed: couldn't acquire lock for key {key}")
+                return False  # Can't acquire lock, return failure
+            print(f"Lock acquired for insert on key {key}")
+            self.transaction.locks_held.add(key)
+        
+>>>>>>> Stashed changes
         # Get the current time
         start_time = datetime.now().strftime("%Y%m%d%H%M%S")
 
         # Initialize the schema encoding to all 0s
         schema_encoding = "0" * self.table.num_columns
+<<<<<<< Updated upstream
 
         # Insert the record
         self.table.insert_record(start_time, schema_encoding, *columns)
 
         return True
+=======
+        
+        # Insert the record
+        try:
+            result = self.table.insert_record(start_time, schema_encoding, *columns)
+            print(f"Insert result for key {key}: {result}")
+            return result
+        except Exception as e:
+            print(f"Insert error for key {key}: {e}")
+            return False
+>>>>>>> Stashed changes
 
     """
     # Read matching record with specified search key
@@ -105,13 +136,30 @@ class Query:
         
         # Get the RID of the record
         rids = self.table.index.locate(search_key_index, search_key)
+        
         if not rids:
+<<<<<<< Updated upstream
             print(f"No records found for key {search_key} in column {search_key_index}")
             return []
+=======
+            print(f"SELECT: No records for key={search_key}")
+            # Check page directory directly as a fallback
+            matching_rids = []
+            for rid, record in self.table.page_directory.items():
+                if record.columns[search_key_index] == search_key:
+                    matching_rids.append(rid)
+            
+            if matching_rids:
+                print(f"SELECT: Found {len(matching_rids)} records in page_directory")
+                rids = matching_rids
+            else:
+                return []
+>>>>>>> Stashed changes
 
         result = []
         for rid in rids:
             try:
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
 =======
                 print(f"Found RID {rid} for key {search_key}")
@@ -152,6 +200,17 @@ class Query:
                 import traceback
                 traceback.print_exc()
                 
+>>>>>>> Stashed changes
+=======
+                latest_rid = self._get_latest_version(rid)
+                record = self.table.find_record(search_key, latest_rid, projected_columns_index)
+                if record:
+                    result.append(record)
+            except Exception as e:
+                print(f"SELECT: Error for key={search_key}")
+                
+        if result:
+            print(f"SELECT: Returned {len(result)} records for key={search_key}")
 >>>>>>> Stashed changes
         return result
 

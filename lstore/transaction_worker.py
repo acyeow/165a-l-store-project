@@ -100,6 +100,7 @@ class TransactionWorker:
         """
         try:
             print(f"Worker started, processing {len(self.transactions)} transactions")
+<<<<<<< Updated upstream
             transaction_count = len(self.transactions)
             success_count = 0
             
@@ -108,15 +109,28 @@ class TransactionWorker:
                     print(f"Starting transaction {i+1}/{transaction_count}")
                     # Make sure transaction has an ID
                     if transaction.transaction_id is None:
+=======
+            
+            for i, transaction in enumerate(self.transactions):
+                try:
+                    print(f"Starting transaction {i+1}/{len(self.transactions)}")
+                    
+                    # Ensure transaction has an ID
+                    if not hasattr(transaction, 'transaction_id') or transaction.transaction_id is None:
+>>>>>>> Stashed changes
                         transaction.transaction_id = id(transaction)
                     
                     # Run the transaction
                     result = transaction.run()
                     
                     # Record the result
+<<<<<<< Updated upstream
                     self.stats.append(result is True)
                     if result is True:
                         success_count += 1
+=======
+                    self.stats.append(result)
+>>>>>>> Stashed changes
                     
                     print(f"Transaction {i+1} completed with result: {result}")
                 except Exception as e:
@@ -124,13 +138,27 @@ class TransactionWorker:
                     import traceback
                     traceback.print_exc()
                     self.stats.append(False)
+<<<<<<< Updated upstream
             
             self.result = success_count
             print(f"Worker completed, {success_count}/{transaction_count} transactions committed")
             self.completed = True
+=======
+                    
+                    # Important: Make sure locks are released even if transaction fails
+                    if hasattr(transaction, 'abort'):
+                        transaction.abort()
+            
+            # Calculate number of successful transactions
+            self.result = len([s for s in self.stats if s])
+            print(f"Worker completed, {self.result}/{len(self.transactions)} transactions committed")
+>>>>>>> Stashed changes
         except Exception as e:
             print(f"Catastrophic error in worker thread: {e}")
             import traceback
             traceback.print_exc()
+<<<<<<< Updated upstream
             self.completed = True  # Mark as completed even on error
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
