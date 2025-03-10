@@ -11,8 +11,11 @@ class Query:
     Any query that crashes (due to exceptions) should return False
     """
 
-    def __init__(self, table):
+    def __init__(self, table, transaction=None):
         self.table = table
+        self.transaction = transaction 
+        self.database = table.database if hasattr(table, 'database') else None
+        self.lock_manager = self.database.lock_manager if self.database else None
 
     """
     # internal Method
@@ -31,7 +34,15 @@ class Query:
         rids = self.table.index.locate(self.table.key, primary_key)
         if not rids:
             return False
-
+            
+        # If part of a transaction, acquire exclusive lock
+        if self.transaction and self.lock_manager:
+            if not self.lock_manager.acquire_lock(
+                self.transaction.transaction_id, primary_key, "delete"
+            ):
+                return False  # Can't acquire lock, return failure
+            self.transaction.locks_held.add(primary_key)
+        
         rid = rids[0]
 
         try:
@@ -79,15 +90,28 @@ class Query:
     """
 
     def insert(self, *columns):
+        """
+        Insert a record with transaction awareness.
+        """
+        key = columns[self.table.key]
+        
+        # If part of a transaction, acquire exclusive lock
+        if self.transaction and self.lock_manager:
+            if not self.lock_manager.acquire_lock(
+                self.transaction.transaction_id, key, "insert"
+            ):
+                return False  # Can't acquire lock, return failure
+            self.transaction.locks_held.add(key)
+        
         # Get the current time
         start_time = datetime.now().strftime("%Y%m%d%H%M%S")
-
+        
         # Initialize the schema encoding to all 0s
         schema_encoding = "0" * self.table.num_columns
-
+        
         # Insert the record
         self.table.insert_record(start_time, schema_encoding, *columns)
-
+        
         return True
 
     """
@@ -102,7 +126,7 @@ class Query:
 
     def select(self, search_key, search_key_index, projected_columns_index):
         """
-        Select a record based on search key.
+        Select a record based on search key with transaction awareness.
         """
         # Get the RID of the record
         rids = self.table.index.locate(search_key_index, search_key)
@@ -112,20 +136,29 @@ class Query:
         result = []
         for rid in rids:
             try:
+                # If part of a transaction, acquire shared lock
+                if self.transaction and self.lock_manager:
+                    if not self.lock_manager.acquire_lock(
+                        self.transaction.transaction_id, search_key, "read"
+                    ):
+                        return []  # Can't acquire lock, return empty result
+                    self.transaction.locks_held.add(search_key)
+                    
                 # Get the base record
                 base_rid = rid
-
+                
                 # Get the latest version through indirection
                 latest_rid = self._get_latest_version(base_rid)
-
+                
                 # Retrieve the record
                 record = self.table.find_record(
                     search_key, latest_rid, projected_columns_index
                 )
                 result.append(record)
+                
             except Exception as e:
                 print(f"Error selecting record: {e}")
-
+                
         return result
 
     def _get_latest_version(self, rid):
@@ -494,6 +527,14 @@ class Query:
         rids = self.table.index.locate(self.table.key, primary_key)
         if not rids:
             return False
+            
+        # If part of a transaction, acquire exclusive lock
+        if self.transaction and self.lock_manager:
+            if not self.lock_manager.acquire_lock(
+                self.transaction.transaction_id, primary_key, "update"
+            ):
+                return False  # Can't acquire lock, return failure
+            self.transaction.locks_held.add(primary_key)
 
         # Extract base RID components
         base_rid = rids[0]
