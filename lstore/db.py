@@ -231,6 +231,7 @@ class Bufferpool:
         Get a page from the bufferpool. If not in memory, load from disk.
         Returns the page data and pins the page.
         """
+<<<<<<< Updated upstream
         # If page is in bufferpool, access it and update access time
         if page_id in self.pages:
             self.access_counter += 1
@@ -277,6 +278,81 @@ class Bufferpool:
         self.access_times[page_id] = self.access_counter
 
         return page_data
+=======
+        try:
+            composite_key = (table_name, page_id)
+            print(f"Getting page {page_id} for table {table_name}")
+            
+            # If page is in bufferpool, access it and update access time
+            if composite_key in self.pages:
+                self.access_counter += 1
+                self.access_times[composite_key] = self.access_counter
+                self.pins[composite_key] = self.pins.get(composite_key, 0) + 1
+                print(f"Page found in bufferpool, pin count: {self.pins[composite_key]}")
+                return self.pages[composite_key][0]  # Return page_data
+
+            print(f"Page not in bufferpool, will load from disk")
+            # If bufferpool is full, evict pages until space is available
+            eviction_attempts = 0
+            while len(self.pages) >= self.size and eviction_attempts < 5:
+                try:
+                    self.evict_page()
+                    print(f"Evicted a page, bufferpool size: {len(self.pages)}")
+                except Exception as e:
+                    print(f"Eviction attempt {eviction_attempts} failed: {e}")
+                    eviction_attempts += 1
+                    
+                    # If no pages can be evicted after several attempts, force eviction
+                    if eviction_attempts >= 5:
+                        print("Forcing eviction of least pinned page")
+                        if self.pages:
+                            # Find the page with the lowest pin count
+                            min_pin_page = min(self.pins, key=self.pins.get)
+                            print(f"Forcing eviction of page {min_pin_page} with pin count {self.pins[min_pin_page]}")
+                            self.write_dirty(min_pin_page, self.pages[min_pin_page][0])
+                            del self.pages[min_pin_page]
+                            del self.page_paths[min_pin_page]
+                            del self.pins[min_pin_page]
+                            del self.access_times[min_pin_page]
+                        else:
+                            print("No pages to evict, but bufferpool reports full - resetting")
+                            self.pages.clear()
+                            self.pins.clear()
+                            self.access_times.clear()
+
+            # Construct the disk file path
+            page_path = self._construct_page_path(table_name, page_id)
+            self.page_paths[composite_key] = page_path
+            print(f"Page path: {page_path}")
+
+            # Load page from disk if it exists, otherwise create empty page
+            if os.path.exists(page_path):
+                try:
+                    with open(page_path, "rb") as f:
+                        page_data = msgpack.unpackb(f.read(), raw=False)
+                    print(f"Loaded page from disk")
+                except Exception as e:
+                    print(f"Error reading page from disk: {e}")
+                    page_data = self._create_empty_page(num_columns)
+            else:
+                print(f"Page not found on disk, creating empty page")
+                page_data = self._create_empty_page(num_columns)
+
+            # Insert the page into the bufferpool
+            self.pages[composite_key] = (page_data, False)  # Not dirty initially
+            self.pins[composite_key] = 1  # Pin on load
+            self.access_counter += 1
+            self.access_times[composite_key] = self.access_counter
+
+            return page_data
+        except Exception as e:
+            print(f"Error in get_page: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Return a minimal empty page to avoid crashes
+            return self._create_empty_page(num_columns)
+>>>>>>> Stashed changes
 
     def set_page(self, page_id, table_name, page_data, num_columns=None):
         """

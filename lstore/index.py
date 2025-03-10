@@ -254,12 +254,32 @@ class Index:
     """
     # returns the location of all records with the given value on column "column"
     """
+<<<<<<< Updated upstream
     def locate(self, column, value):
         # If column is out of range or no index exists for the column, return empty list
         if column >= len(self.indices) or self.indices[column] is None:
             return []
         # Return the list of RIDs for the given value in the column, empty list if value not found
         return self.indices[column].search(value)
+=======
+    def locate(self, column_number, column_value):
+        """
+        Returns the location of all records with the given value on column "column"
+        """
+        if column_number in self.indices:
+            # Use the index if available
+            results = self.indices[column_number].search(column_value)
+            if results:
+                return results
+        
+        # If no index or no match in index, search directly in page directory
+        matching_rids = []
+        for rid, record in self.table.page_directory.items():
+            if record.columns[column_number] == column_value:
+                matching_rids.append(rid)
+        
+        return matching_rids
+>>>>>>> Stashed changes
 
     """
     # Returns the RIDs of all records with values in column "column" between "begin" and "end"
@@ -284,12 +304,29 @@ class Index:
             self.indices[column_number].insert(value, rid)
 
     def insert(self, key, rid):
+<<<<<<< Updated upstream
         # If index for the column does not exist, create one
         if self.indices[0] is None:
             self.create_index(0)
         # Insert the key and RID into the index using the B-Tree
         self.indices[0].insert(key, rid)
 
+=======
+        """
+        Insert a key-RID pair into all indices
+        """
+        # Add to all existing indices
+        for column_number, tree in self.indices.items():
+            # Get the value from the page directory if available
+            if rid in self.table.page_directory:
+                record = self.table.page_directory[rid]
+                if column_number < len(record.columns):
+                    value = record.columns[column_number]
+                    tree.insert(value, rid)
+            # If we don't have the record, just use the key (assuming it's for the primary key column)
+            elif column_number == self.table.key:
+                tree.insert(key, rid)
+>>>>>>> Stashed changes
     """
     # optional: Drop index of specific column
     """

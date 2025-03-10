@@ -76,21 +76,27 @@ class Table:
         """
         Find a record in the bufferpool using its RID.
         """
-        # Extract the page type and location from the RID
-        page_range_idx, page_idx, record_idx, page_type = rid
+        try:
+            # Extract the page type and location from the RID
+            page_range_idx, page_idx, record_idx, page_type = rid
+            
+            print(f"Finding record {rid} for key {key}")
 
-        # Determine if we're looking at a base or tail page
-        is_base_page = page_type == "b"
-        page_type_str = "base" if is_base_page else "tail"
+            # Determine if we're looking at a base or tail page
+            is_base_page = page_type == "b"
+            page_type_str = "base" if is_base_page else "tail"
 
-        # Create a page identifier for the bufferpool
-        page_identifier = (page_type_str, page_range_idx, page_idx)
+            # Create a page identifier for the bufferpool
+            page_identifier = (page_type_str, page_range_idx, page_idx)
+            print(f"Page identifier: {page_identifier}")
 
-        # Get the page from the bufferpool
-        page_data = self.database.bufferpool.get_page(
-            page_identifier, self.name, self.num_columns
-        )
+            # Get the page from the bufferpool
+            page_data = self.database.bufferpool.get_page(
+                page_identifier, self.name, self.num_columns
+            )
+            print(f"Got page data from bufferpool, columns: {len(page_data.get('columns', []))}")
 
+<<<<<<< Updated upstream
         # Extract the values for the projected columns
         values = []
         for i, include in enumerate(projected_columns_index):
@@ -123,9 +129,42 @@ class Table:
 
         # Unpin the page when done
         self.database.bufferpool.unpin_page(page_identifier)
+=======
+            # Extract the values for the projected columns
+            values = []
+            for i, include in enumerate(projected_columns_index):
+                if include == 1:
+                    # Only include columns that are requested
+                    try:
+                        if (
+                                "columns" in page_data
+                                and i < len(page_data["columns"])
+                                and record_idx < len(page_data["columns"][i])
+                        ):
+                            # Append the value from the specified column at the record index
+                            values.append(page_data["columns"][i][record_idx])
+                        else:
+                            print(f"Missing column {i} or record {record_idx}, defaulting to 0")
+                            # Default to 0 if column data is missing or index is out of bounds
+                            values.append(0)
+                    except Exception as e:
+                        # Handle any errors, defaulting to 0
+                        print(f"Error reading column {i} value: {e}")
+                        values.append(0)
 
-        # Create a record with the extracted values
-        return Record(rid, key, values)
+            # Unpin the page when done
+            self.database.bufferpool.unpin_page(page_identifier, self.name)
+            print(f"Unpinned page, values: {values}")
+>>>>>>> Stashed changes
+
+            # Create a record with the extracted values
+            return Record(rid, key, values)
+        except Exception as e:
+            print(f"Error in find_record: {e}")
+            import traceback
+            traceback.print_exc()
+            # Return a default record if we failed
+            return Record(rid, key, [0] * sum(projected_columns_index))
 
     def insert_record(self, start_time, schema_encoding, *columns):
         """
@@ -203,7 +242,89 @@ class Table:
         key = columns[self.key]
         self.index.insert(key, rid)
 
+<<<<<<< Updated upstream
         return True
+=======
+            # Determine page identifiers
+            page_range_id = self.page_ranges.index(page_range)
+            page_id = page_range.base_pages.index(base_page)
+
+            # Create RID
+            rid = (page_range_id, page_id, record_index, "b")
+
+            # Create page identifier for bufferpool
+            page_identifier = ("base", page_range_id, page_id)
+
+            # Get page from bufferpool
+            page_data = self.database.bufferpool.get_page(
+                page_identifier, self.name, self.num_columns
+            )
+
+            # Make sure the page has the expected structure
+            if "columns" not in page_data:
+                page_data["columns"] = [[] for _ in range(self.num_columns)]
+            if "indirection" not in page_data:
+                page_data["indirection"] = []
+            if "rid" not in page_data:
+                page_data["rid"] = []
+            if "timestamp" not in page_data:
+                page_data["timestamp"] = []
+            if "schema_encoding" not in page_data:
+                page_data["schema_encoding"] = []
+
+            # Insert record metadata
+            page_data["indirection"].append(rid)
+            page_data["rid"].append(rid)
+            page_data["timestamp"].append(start_time)
+            page_data["schema_encoding"].append(schema_encoding)
+
+            # Insert column values
+            for i, value in enumerate(columns):
+                # Make sure there are enough column lists
+                while i >= len(page_data["columns"]):
+                    page_data["columns"].append([])
+
+                # Add the value to the appropriate column
+                page_data["columns"][i].append(value)
+
+                # Also insert into the direct page (for consistency)
+                try:
+                    base_page.pages[i].write(value)
+                except Exception as e:
+                    print(f"Warning: Failed to write to direct page: {e}")
+
+            # Update the page in the bufferpool
+            self.database.bufferpool.set_page(page_identifier, self.name, page_data)
+
+            # Unpin the page
+            self.database.bufferpool.unpin_page(page_identifier, self.name)
+
+            # Update the base_page metadata
+            base_page.num_records += 1
+            base_page.indirection.append(rid)
+            base_page.schema_encoding.append(schema_encoding)
+            base_page.start_time.append(start_time)
+            base_page.rid.append(rid)
+
+            # Add to page directory
+            record = Record(rid, columns[self.key], list(columns))
+            self.page_directory[rid] = record
+
+            # Insert key to the index
+            key = columns[self.key]
+            try:
+        # Add to primary key index
+                self.index.insert(key, rid)
+                # Also create entry in page directory
+                self.page_directory[rid] = Record(rid, key, list(columns))
+            except Exception as e:
+                print(f"Error updating index on insert: {e}")
+
+            return True
+        except Exception as e:
+            print(f"Error in insert_record: {e}")
+            return False
+>>>>>>> Stashed changes
 
     def update(self, primary_key, *columns):
         # Get the RID of the record
