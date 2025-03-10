@@ -172,6 +172,7 @@ class Table:
         """
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         # Get the current base page
         page_range, base_page = self.find_current_base_page()
         record_index = base_page.num_records  # Current index for the new record
@@ -251,11 +252,16 @@ class Table:
 =======
 =======
 >>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes
         try:
             # Get the current base page and create RID
             page_range, base_page = self.find_current_base_page()
             record_index = base_page.num_records
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -263,6 +269,7 @@ class Table:
             page_id = page_range.base_pages.index(base_page)
             rid = (page_range_id, page_id, record_index, "b")
             key = columns[self.key]
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
             try:
@@ -274,6 +281,8 @@ class Table:
                 print(f"Error updating index on insert: {e}")
 
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
             
@@ -291,6 +300,9 @@ class Table:
             
             print(f"INSERT: key={key} rid={rid}")
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -595,6 +607,9 @@ class Table:
             if missing > 0:
                 print(f"Warning: {missing} records in page directory not found in primary key index")
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes

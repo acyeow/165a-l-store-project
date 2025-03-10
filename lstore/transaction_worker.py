@@ -102,6 +102,7 @@ class TransactionWorker:
             print(f"Worker started, processing {len(self.transactions)} transactions")
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
             transaction_count = len(self.transactions)
             success_count = 0
             
@@ -113,6 +114,8 @@ class TransactionWorker:
 =======
 =======
 >>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes
             
             for i, transaction in enumerate(self.transactions):
                 try:
@@ -121,6 +124,9 @@ class TransactionWorker:
                     # Ensure transaction has an ID
                     if not hasattr(transaction, 'transaction_id') or transaction.transaction_id is None:
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -132,9 +138,13 @@ class TransactionWorker:
                     # Record the result
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
                     self.stats.append(result is True)
                     if result is True:
                         success_count += 1
+=======
+                    self.stats.append(result)
+>>>>>>> Stashed changes
 =======
                     self.stats.append(result)
 >>>>>>> Stashed changes
@@ -150,11 +160,14 @@ class TransactionWorker:
                     self.stats.append(False)
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
             
             self.result = success_count
             print(f"Worker completed, {success_count}/{transaction_count} transactions committed")
             self.completed = True
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
                     
@@ -166,6 +179,9 @@ class TransactionWorker:
             self.result = len([s for s in self.stats if s])
             print(f"Worker completed, {self.result}/{len(self.transactions)} transactions committed")
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -175,7 +191,10 @@ class TransactionWorker:
             traceback.print_exc()
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
             self.completed = True  # Mark as completed even on error
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes

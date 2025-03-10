@@ -95,6 +95,9 @@ class Query:
             self.transaction.locks_held.add(key)
         
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -143,9 +146,12 @@ class Query:
         if not rids:
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
             print(f"No records found for key {search_key} in column {search_key_index}")
             return []
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
             print(f"SELECT: No records for key={search_key}")
@@ -161,6 +167,9 @@ class Query:
             else:
                 return []
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
@@ -168,6 +177,7 @@ class Query:
         result = []
         for rid in rids:
             try:
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
@@ -210,6 +220,17 @@ class Query:
                 import traceback
                 traceback.print_exc()
                 
+>>>>>>> Stashed changes
+=======
+                latest_rid = self._get_latest_version(rid)
+                record = self.table.find_record(search_key, latest_rid, projected_columns_index)
+                if record:
+                    result.append(record)
+            except Exception as e:
+                print(f"SELECT: Error for key={search_key}")
+                
+        if result:
+            print(f"SELECT: Returned {len(result)} records for key={search_key}")
 >>>>>>> Stashed changes
 =======
                 latest_rid = self._get_latest_version(rid)

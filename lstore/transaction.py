@@ -20,9 +20,12 @@ class Transaction:
     def add_query(self, query, table, *args):
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         self.queries.append((query, args))
         # use grades_table for aborting
 =======
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
         # Initialize transaction ID if not already done
@@ -85,6 +88,7 @@ class Transaction:
         
     # If you choose to implement this differently this method must still return True if transaction commits or False on abort
     def run(self):
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
@@ -151,6 +155,8 @@ class Transaction:
 =======
 =======
 >>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes
         print(f"TX{self.transaction_id}: Running {len(self.queries)} queries")
         
         # Initialize transaction components
@@ -189,6 +195,7 @@ class Transaction:
         except Exception as e:
             print(f"TX{self.transaction_id}: Execution error")
             return self.abort()
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
 >>>>>>> Stashed changes
 
@@ -260,6 +267,8 @@ class Transaction:
         """
 >>>>>>> Stashed changes
 =======
+=======
+>>>>>>> Stashed changes
 
     def abort(self):
         """
@@ -286,6 +295,9 @@ class Transaction:
         """
         Commit the transaction, making all changes permanent
         """
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
         try:
             # Release all locks
@@ -295,7 +307,10 @@ class Transaction:
                         self.lock_manager.release_lock(self.transaction_id, record_id)
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
                         print(f"Released lock on record {record_id}")
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 =======
@@ -306,7 +321,11 @@ class Transaction:
             print(f"Error releasing locks during commit: {e}")
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
             
+=======
+                
+>>>>>>> Stashed changes
 =======
                 
 >>>>>>> Stashed changes
@@ -319,7 +338,10 @@ class Transaction:
         self.locks_held.clear()
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         self._deleted_records.clear()
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
 =======
