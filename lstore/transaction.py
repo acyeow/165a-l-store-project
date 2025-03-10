@@ -19,9 +19,12 @@ class Transaction:
     """
     def add_query(self, query, table, *args):
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         self.queries.append((query, args))
         # use grades_table for aborting
 =======
+=======
+>>>>>>> Stashed changes
         # Initialize transaction ID if not already done
         if not hasattr(self, 'transaction_id') or self.transaction_id is None:
             self.transaction_id = id(self)
@@ -82,6 +85,7 @@ class Transaction:
         
     # If you choose to implement this differently this method must still return True if transaction commits or False on abort
     def run(self):
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
         for query, args in self.queries:
@@ -145,6 +149,8 @@ class Transaction:
                 return False
 >>>>>>> Stashed changes
 =======
+=======
+>>>>>>> Stashed changes
         print(f"TX{self.transaction_id}: Running {len(self.queries)} queries")
         
         # Initialize transaction components
@@ -183,6 +189,7 @@ class Transaction:
         except Exception as e:
             print(f"TX{self.transaction_id}: Execution error")
             return self.abort()
+<<<<<<< Updated upstream
 >>>>>>> Stashed changes
 
     
@@ -252,6 +259,34 @@ class Transaction:
         Commit the transaction, making all changes permanent
         """
 >>>>>>> Stashed changes
+=======
+
+    def abort(self):
+        """
+        Abort the transaction and roll back any changes.
+        """
+        print(f"Aborting transaction {self.transaction_id}")
+        
+        # Release all locks
+        if hasattr(self, 'lock_manager') and self.lock_manager:
+            for record_id in self.locks_held:
+                try:
+                    self.lock_manager.release_lock(self.transaction_id, record_id)
+                except Exception as e:
+                    print(f"Error releasing lock on {record_id}: {e}")
+        
+        # Clear transaction state
+        self.queries = []
+        if hasattr(self, 'rollback_operations'):
+            self.rollback_operations = []
+        self.locks_held = set()
+        
+        return False
+    def commit(self):
+        """
+        Commit the transaction, making all changes permanent
+        """
+>>>>>>> Stashed changes
         try:
             # Release all locks
             if self.lock_manager:
@@ -259,7 +294,10 @@ class Transaction:
                     try:
                         self.lock_manager.release_lock(self.transaction_id, record_id)
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
                         print(f"Released lock on record {record_id}")
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
                     except Exception as e:
@@ -267,7 +305,11 @@ class Transaction:
         except Exception as e:
             print(f"Error releasing locks during commit: {e}")
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
             
+=======
+                
+>>>>>>> Stashed changes
 =======
                 
 >>>>>>> Stashed changes
@@ -276,7 +318,10 @@ class Transaction:
         self.rollback_operations.clear()
         self.locks_held.clear()
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         self._deleted_records.clear()
+=======
+>>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
         return True

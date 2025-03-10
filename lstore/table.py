@@ -171,6 +171,7 @@ class Table:
         Insert a record using the bufferpool for page access.
         """
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         # Get the current base page
         page_range, base_page = self.find_current_base_page()
         record_index = base_page.num_records  # Current index for the new record
@@ -248,15 +249,21 @@ class Table:
 =======
             # Determine page identifiers
 =======
+=======
+>>>>>>> Stashed changes
         try:
             # Get the current base page and create RID
             page_range, base_page = self.find_current_base_page()
             record_index = base_page.num_records
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
             page_range_id = self.page_ranges.index(page_range)
             page_id = page_range.base_pages.index(base_page)
             rid = (page_range_id, page_id, record_index, "b")
             key = columns[self.key]
+<<<<<<< Updated upstream
 <<<<<<< Updated upstream
             try:
         # Add to primary key index
@@ -267,6 +274,8 @@ class Table:
                 print(f"Error updating index on insert: {e}")
 
 =======
+=======
+>>>>>>> Stashed changes
             
             # Get page from bufferpool and insert data
             page_identifier = ("base", page_range_id, page_id)
@@ -281,6 +290,9 @@ class Table:
             self.index.insert(key, rid)
             
             print(f"INSERT: key={key} rid={rid}")
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
             return True
         except Exception as e:
@@ -582,4 +594,7 @@ class Table:
                     missing += 1
             if missing > 0:
                 print(f"Warning: {missing} records in page directory not found in primary key index")
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes

@@ -64,6 +64,7 @@ for i in range(num_threads):
     transaction_workers[i].join()
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 # After all workers finish, add this debug code
 print(f"Page directory contains {len(grades_table.page_directory)} records")
 print(f"Index contains keys: {len(grades_table.index.indices.get(0, {}).keys())}")
@@ -75,6 +76,13 @@ success_count = sum(worker.result for worker in transaction_workers)
 print(f"Transactions committed: {success_count}/{number_of_transactions}")
 >>>>>>> Stashed changes
 
+=======
+# After all transaction workers have joined
+print("\n--- TRANSACTION SUMMARY ---")
+success_count = sum(worker.result for worker in transaction_workers)
+print(f"Transactions committed: {success_count}/{number_of_transactions}")
+
+>>>>>>> Stashed changes
 print("\n--- INDEX INTEGRITY CHECK ---")
 successful_keys = []
 failed_keys = []
