@@ -7,7 +7,7 @@ from threading import Lock
 
 class Transaction:
     def __init__(self, transaction_id=None, buffer_pool=None, lock_manager=None):
-        self.transaction_id = transaction_id  # Unique ID for transaction
+        self.transaction_id = transaction_id if transaction_id is not None else id(self)  # Unique ID for transaction
         self.queries = []  # List to store queries and their arguments
         self.rollback_operations = []  # List of tuples to store operations for rollback
         self.buffer_pool = buffer_pool  # Reference to buffer pool
@@ -66,42 +66,63 @@ class Transaction:
 
     def run(self):
         with self.mutex:
+            # Ensure transaction_id is set
+            if self.transaction_id is None:
+                self.transaction_id = id(self)
+            
+            print(f"Transaction {self.transaction_id} started with {len(self.queries)} queries")
+            
             # Ensure buffer_pool and lock_manager are available
             if not self.queries:
+                print("No queries to execute")
                 return False
+                
             if self.buffer_pool is None or self.lock_manager is None:
                 _, first_table, _ = self.queries[0]
                 if self.buffer_pool is None and hasattr(first_table, 'database'):
                     self.buffer_pool = first_table.database.bufferpool
                 if self.lock_manager is None and hasattr(first_table, 'database'):
                     self.lock_manager = first_table.database.lock_manager
-
+                    
+            if self.lock_manager is None:
+                print("Failed to get lock_manager")
+                return False
+                
             # Get locks, abort if fail
             for query, table, args in self.queries:
                 record_id = args[0]  # Assuming first argument is record ID
                 operation = query.__name__
+                print(f"Acquiring {operation} lock on record {record_id}")
+                
                 if not self.lock_manager.acquire_lock(self.transaction_id, record_id, operation):
-                    self.abort()
-                    return False
+                    print(f"Failed to acquire lock for {operation} on record {record_id}")
+                    return self.abort()  # Ensure abort returns False
+                    
                 self.locks_held.add(record_id)
-
-            # Do queries, abort if fail
-            for query, table, args in self.queries:
+            
+            # Execute all queries
+            for i, (query, table, args) in enumerate(self.queries):
+                print(f"Executing query {i+1}/{len(self.queries)}: {query.__name__}")
+                
                 # Store the query if it is delete
                 if query.__name__ == "delete":
                     columns = self._get_record_columns(table, args[0])
                     if columns is not None:
                         self._deleted_records[args[0]] = columns
-
                 # Store the query if it is insert
                 elif query.__name__ == "insert":
                     self._deleted_records[args[0]] = args
-
+                    
+                # Execute the query
                 result = query(*args)
+                print(f"Query result: {result}")
+                
                 if result is False:
-                    self.abort()
-                    return False
-            return self.commit()
+                    print(f"Query {i+1} failed, aborting transaction")
+                    return self.abort()  # Ensure abort returns False
+                    
+            print(f"All queries succeeded, committing transaction {self.transaction_id}")
+            return self.commit()  # Ensure commit returns True
 
     def abort(self):
         # This function returns false if something is aborted

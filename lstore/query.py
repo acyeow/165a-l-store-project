@@ -103,16 +103,24 @@ class Query:
                 return False  # Can't acquire lock, return failure
             self.transaction.locks_held.add(key)
         
+        # Check if key already exists
+        if self.table.index.locate(self.table.key, key):
+            return False  # Duplicate key
+        
         # Get the current time
         start_time = datetime.now().strftime("%Y%m%d%H%M%S")
         
         # Initialize the schema encoding to all 0s
         schema_encoding = "0" * self.table.num_columns
         
-        # Insert the record
-        self.table.insert_record(start_time, schema_encoding, *columns)
-        
-        return True
+        try:
+            # Insert the record
+            result = self.table.insert_record(start_time, schema_encoding, *columns)
+            print(f"Insert result for key {key}: {result}")
+            return result
+        except Exception as e:
+            print(f"Insert error for key {key}: {e}")
+            return False
 
     """
     # Read matching record with specified search key

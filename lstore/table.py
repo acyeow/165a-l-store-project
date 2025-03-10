@@ -122,79 +122,89 @@ class Table:
         """
         Insert a record using the bufferpool for page access.
         """
-        # Get the current base page
-        page_range, base_page = self.find_current_base_page()
-        record_index = base_page.num_records  # Current index for the new record
-
-        # Determine page identifiers
-        page_range_id = self.page_ranges.index(page_range)
-        page_id = page_range.base_pages.index(base_page)
-
-        # Create RID
-        rid = (page_range_id, page_id, record_index, "b")
-
-        # Create page identifier for bufferpool
-        page_identifier = ("base", page_range_id, page_id)
-
-        # Get page from bufferpool
-        page_data = self.database.bufferpool.get_page(
-            page_identifier, self.name, self.num_columns
-        )
-
-        # Make sure the page has the expected structure
-        if "columns" not in page_data:
-            page_data["columns"] = [[] for _ in range(self.num_columns)]
-        if "indirection" not in page_data:
-            page_data["indirection"] = []
-        if "rid" not in page_data:
-            page_data["rid"] = []
-        if "timestamp" not in page_data:
-            page_data["timestamp"] = []
-        if "schema_encoding" not in page_data:
-            page_data["schema_encoding"] = []
-
-        # Insert record metadata
-        page_data["indirection"].append(rid)
-        page_data["rid"].append(rid)
-        page_data["timestamp"].append(start_time)
-        page_data["schema_encoding"].append(schema_encoding)
-
-        # Insert column values
-        for i, value in enumerate(columns):
-            # Make sure there are enough column lists
-            while i >= len(page_data["columns"]):
-                page_data["columns"].append([])
-
-            # Add the value to the appropriate column
-            page_data["columns"][i].append(value)
-
-            # Also insert into the direct page (for consistency)
-            try:
-                base_page.pages[i].write(value)
-            except Exception as e:
-                print(f"Warning: Failed to write to direct page: {e}")
-
-        # Update the page in the bufferpool
-        self.database.bufferpool.set_page(page_identifier, self.name, page_data)
-
-        # Unpin the page
-        self.database.bufferpool.unpin_page(page_identifier, self.name)
-
-        # Update the base_page metadata
-        base_page.num_records += 1
-        base_page.indirection.append(rid)
-        base_page.schema_encoding.append(schema_encoding)
-        base_page.start_time.append(start_time)
-        base_page.rid.append(rid)
-
-        # Add to page directory
-        self.page_directory[rid] = Record(rid, columns[self.key], columns)
-
-        # Insert key to the index
+        # Check if key already exists
         key = columns[self.key]
-        self.index.insert(key, rid)
+        if self.index.locate(self.key, key):
+            return False  # Duplicate key
+        
+        try:
+            # Get the current base page
+            page_range, base_page = self.find_current_base_page()
+            record_index = base_page.num_records  # Current index for the new record
 
-        return True
+            # Determine page identifiers
+            page_range_id = self.page_ranges.index(page_range)
+            page_id = page_range.base_pages.index(base_page)
+
+            # Create RID
+            rid = (page_range_id, page_id, record_index, "b")
+
+            # Create page identifier for bufferpool
+            page_identifier = ("base", page_range_id, page_id)
+
+            # Get page from bufferpool
+            page_data = self.database.bufferpool.get_page(
+                page_identifier, self.name, self.num_columns
+            )
+
+            # Make sure the page has the expected structure
+            if "columns" not in page_data:
+                page_data["columns"] = [[] for _ in range(self.num_columns)]
+            if "indirection" not in page_data:
+                page_data["indirection"] = []
+            if "rid" not in page_data:
+                page_data["rid"] = []
+            if "timestamp" not in page_data:
+                page_data["timestamp"] = []
+            if "schema_encoding" not in page_data:
+                page_data["schema_encoding"] = []
+
+            # Insert record metadata
+            page_data["indirection"].append(rid)
+            page_data["rid"].append(rid)
+            page_data["timestamp"].append(start_time)
+            page_data["schema_encoding"].append(schema_encoding)
+
+            # Insert column values
+            for i, value in enumerate(columns):
+                # Make sure there are enough column lists
+                while i >= len(page_data["columns"]):
+                    page_data["columns"].append([])
+
+                # Add the value to the appropriate column
+                page_data["columns"][i].append(value)
+
+                # Also insert into the direct page (for consistency)
+                try:
+                    base_page.pages[i].write(value)
+                except Exception as e:
+                    print(f"Warning: Failed to write to direct page: {e}")
+
+            # Update the page in the bufferpool
+            self.database.bufferpool.set_page(page_identifier, self.name, page_data)
+
+            # Unpin the page
+            self.database.bufferpool.unpin_page(page_identifier, self.name)
+
+            # Update the base_page metadata
+            base_page.num_records += 1
+            base_page.indirection.append(rid)
+            base_page.schema_encoding.append(schema_encoding)
+            base_page.start_time.append(start_time)
+            base_page.rid.append(rid)
+
+            # Add to page directory
+            record = Record(rid, columns[self.key], list(columns))
+            self.page_directory[rid] = record
+
+            # Insert key to the index
+            key = columns[self.key]
+            self.index.insert(key, rid)
+
+            return True
+        except Exception as e:
+            print(f"Error in insert_record: {e}")
+            return False
 
     def update(self, primary_key, *columns):
         # Get the RID of the record
