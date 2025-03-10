@@ -63,11 +63,6 @@ for i in range(num_threads):
 for i in range(num_threads):
     transaction_workers[i].join()
 
-
-# After all workers finish, add this debug code
-print(f"Page directory contains {len(grades_table.page_directory)} records")
-print(f"Index contains keys: {len(grades_table.index.indices.get(0, {}).keys())}")
-
 # After all transaction workers have joined
 print("\n--- TRANSACTION SUMMARY ---")
 success_count = sum(worker.result for worker in transaction_workers)

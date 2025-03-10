@@ -1,7 +1,9 @@
 from lstore.table import Table, Record
 from lstore.index import Index
 from lstore.query import Query
+from lstore.db import LockManager
 import os
+from threading import Lock
 
 
 class Transaction:
@@ -9,9 +11,15 @@ class Transaction:
     # Creates a transaction object.
     """
 
-    def __init__(self):
-        self.queries = []
-        pass
+    def __init__(self, transaction_id=None, buffer_pool=None, lock_manager=None):
+        self.transaction_id = transaction_id if transaction_id is not None else id(self)  # Unique ID for transaction
+        self.queries = []  # List to store queries and their arguments
+        self.rollback_operations = []  # List of tuples to store operations for rollback
+        self.buffer_pool = buffer_pool  # Reference to buffer pool
+        self.lock_manager = lock_manager  # Reference to lock manager
+        self.locks_held = set()  # Set to track locks held by this transaction
+        self.mutex = Lock()  # Mutex Lock for thread-safe log writes
+        self._deleted_records = {} # Deleted records for rollback
 
     """
     # Adds the given query to this transaction
