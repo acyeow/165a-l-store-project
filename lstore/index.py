@@ -137,32 +137,9 @@ class BPlusTree:
         return result
 
     # Deletion operation
+    # Deletion operation
     def delete(self, key):
         leaf = self.find_leaf(key)
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-
-        # Binary search to find the key
-        left, right = 0, len(leaf.keys)
-        while left < right:
-            mid = (left + right) // 2
-            if leaf.keys[mid][0] < key:
-                left = mid + 1
-            else:
-                right = mid
-
-        # If key exists, remove it
-        if left < len(leaf.keys) and leaf.keys[left][0] == key:
-            leaf.keys.pop(left)
-
-            # Handle root case
-            if leaf == self.root:
-                if not leaf.keys:
-                    self.root = BPlusTreeNode(leaf=True)
-                return
-=======
-=======
->>>>>>> Stashed changes
         
         # Find all entries with the given key
         to_remove = []
@@ -183,14 +160,6 @@ class BPlusTree:
         # Fix underflow if necessary
         if len(leaf.keys) < self.t:
             self.fix_structure(leaf)
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-
-            # Fix underflow if necessary
-            if len(leaf.keys) < self.t:
-                self.fix_structure(leaf)
-=======
->>>>>>> Stashed changes
 
     # Restoration function for keeping structure after deletion
     def fix_structure(self, node):
@@ -283,37 +252,14 @@ class Index:
     """
     # returns the location of all records with the given value on column "column"
     """
-<<<<<<< Updated upstream
     def locate(self, column, value):
         # If column is out of range or no index exists for the column, return empty list
         if column >= len(self.indices) or self.indices[column] is None:
             return []
         # Return the list of RIDs for the given value in the column, empty list if value not found
         return self.indices[column].search(value)
-=======
+
     def locate(self, column_number, column_value):
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-        """
-        Returns the location of all records with the given value on column "column"
-        """
-        if column_number in self.indices:
-            # Use the index if available
-            results = self.indices[column_number].search(column_value)
-            if results:
-                return results
-        
-        # If no index or no match in index, search directly in page directory
-        matching_rids = []
-        for rid, record in self.table.page_directory.items():
-            if record.columns[column_number] == column_value:
-                matching_rids.append(rid)
-        
-        return matching_rids
->>>>>>> Stashed changes
-=======
-=======
->>>>>>> Stashed changes
         # If column is out of range or no index exists for the column, return empty list
         if column_number >= len(self.indices) or self.indices[column_number] is None:
             # Fall back to direct search in page directory
@@ -325,10 +271,6 @@ class Index:
         
         # Use the index if it exists
         return self.indices[column_number].search(column_value)
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
 
     """
     # Returns the RIDs of all records with values in column "column" between "begin" and "end"
@@ -336,13 +278,6 @@ class Index:
     def locate_range(self, begin, end, column):
         # If column is out of range or no index exists for the column, return empty list
         if column >= len(self.indices) or self.indices[column] is None:
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-            return []
-        # Return the list of RIDs for the given range in the column, empty list if no records found
-=======
-=======
->>>>>>> Stashed changes
             # Fall back to direct search in page directory
             matching_rids = []
             for rid, record in self.table.page_directory.items():
@@ -351,10 +286,6 @@ class Index:
             return matching_rids
         
         # Use the index if it exists
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
         return self.indices[column].traverse(begin, end)
 
 
@@ -378,73 +309,25 @@ class Index:
         return True
 
     def insert(self, key, rid):
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-        # If index for the column does not exist, create one
-        if self.indices[0] is None:
-            self.create_index(0)
-        # Insert the key and RID into the index using the B-Tree
-        self.indices[0].insert(key, rid)
-
-=======
-        """
-        Insert a key-RID pair into all indices
-        """
-        # Add to all existing indices
-        for column_number, tree in self.indices.items():
-            # Get the value from the page directory if available
-            if rid in self.table.page_directory:
-                record = self.table.page_directory[rid]
-                if column_number < len(record.columns):
-                    value = record.columns[column_number]
-                    tree.insert(value, rid)
-            # If we don't have the record, just use the key (assuming it's for the primary key column)
-            elif column_number == self.table.key:
-                tree.insert(key, rid)
->>>>>>> Stashed changes
-=======
-=======
->>>>>>> Stashed changes
-        """
-        Insert a record's key and RID into all active indices.
-        """
+        # Get the record from page directory
         record = self.table.page_directory.get(rid)
         
         if record:
-            # Insert into all active indices
-            for col_idx, idx in enumerate(self.indices):
-                if idx is not None and col_idx < len(record.columns):
-                    col_value = record.columns[col_idx]
-                    idx.insert(col_value, rid)
+            # Update all existing indices
+            for column_number in range(len(self.indices)):
+                if self.indices[column_number] is not None and column_number < len(record.columns):
+                    value = record.columns[column_number]
+                    self.indices[column_number].insert(value, rid)
         else:
-            # If record not in page directory yet but we have the key,
-            # at least update the primary key index
+            # If record not in page directory yet, at least update primary key index
             if self.indices[self.table.key] is not None:
                 self.indices[self.table.key].insert(key, rid)
-<<<<<<< Updated upstream
->>>>>>> Stashed changes
-=======
->>>>>>> Stashed changes
     """
     # optional: Drop index of specific column
     """
     def drop_index(self, column_number):
         # If column is out of range, do nothing
         if column_number >= len(self.indices):
-<<<<<<< Updated upstream
-<<<<<<< Updated upstream
-            return
-        # Drop index for the column
-        self.indices[column_number] = None
-
-    # Delete a value from the index
-    def delete(self, column, value):
-        if column < len(self.indices) and self.indices[column] is not None:
-            self.indices[column].delete(value)
-=======
-=======
->>>>>>> Stashed changes
             return False
             
         # Drop index for the column
@@ -468,9 +351,4 @@ class Index:
         else:
             # If record not in page directory, at least try to remove from primary key index
             if self.indices[self.table.key] is not None:
-<<<<<<< Updated upstream
                 self.indices[self.table.key].delete(key)
->>>>>>> Stashed changes
-=======
-                self.indices[self.table.key].delete(key)
->>>>>>> Stashed changes
