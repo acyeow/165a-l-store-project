@@ -61,7 +61,7 @@ class TransactionWorker:
             
             for i, transaction in enumerate(self.transactions):
                 try:
-                    print(f"Starting transaction {i+1}/{transaction_count}")
+                    print(f"Starting transaction {i+1}/{transaction_count} with {len(transaction.queries)} queries")
                     # Make sure transaction has an ID
                     if transaction.transaction_id is None:
                         transaction.transaction_id = id(transaction)

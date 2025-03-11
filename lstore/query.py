@@ -76,6 +76,7 @@ class Query:
     """
 
     def insert(self, *columns):
+        print(f"Inserting record with columns: {columns}")
         # Get the current time
         start_time = datetime.now().strftime("%Y%m%d%H%M%S")
 
@@ -83,9 +84,14 @@ class Query:
         schema_encoding = "0" * self.table.num_columns
 
         # Insert the record
-        self.table.insert_record(start_time, schema_encoding, *columns)
-
-        return True
+        success = self.table.insert_record(start_time, schema_encoding, *columns)
+        
+        if success:
+            print(f"Successfully inserted record with key {columns[self.table.key]}")
+        else:
+            print(f"Failed to insert record with key {columns[self.table.key]}")
+        
+        return success
 
     """
     # Read matching record with specified search key

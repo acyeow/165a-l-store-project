@@ -38,6 +38,7 @@ class BPlusTree:
 
     # Insertion operation for inserting into leafs
     def insert(self, key, rid):
+        print(f"Indexing key {key} with RID {rid}")
         # check the leaf to insert into and split it if full
         leaf = self.find_leaf(key)
         i = 0
@@ -262,7 +263,9 @@ class Index:
             return matching_rids
         
         # Use the index if it exists
-        return self.indices[column_number].search(column_value)
+        result = self.indices[column_number].search(column_value)
+        print(f"Locate for column {column_number}, value {column_value} found: {result}")
+        return result
 
     """
     # Returns the RIDs of all records with values in column "column" between "begin" and "end"
