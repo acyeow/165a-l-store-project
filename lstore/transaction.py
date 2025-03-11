@@ -32,59 +32,46 @@ class Transaction:
         
     # If you choose to implement this differently this method must still return True if transaction commits or False on abort
     def run(self):
-        with self.mutex:
-            # Ensure transaction_id is set
-            if self.transaction_id is None:
-                self.transaction_id = id(self)
-            
-            # Ensure buffer_pool and lock_manager are available
-            if not self.queries:
-                print(f"Transaction {self.transaction_id}: No queries to execute")
-                return False
-                
-            if self.buffer_pool is None or self.lock_manager is None:
-                _, first_table, _ = self.queries[0]
-                if self.buffer_pool is None and hasattr(first_table, 'database'):
-                    self.buffer_pool = first_table.database.bufferpool
-                if self.lock_manager is None and hasattr(first_table, 'database'):
-                    self.lock_manager = first_table.database.lock_manager
-                    
-            if self.lock_manager is None:
-                print(f"Transaction {self.transaction_id}: Lock manager not available")
-                return False
-            
-            try:    
-                # Get locks, abort if fail
-                for query, table, args in self.queries:
-                    record_id = args[0]  # Assuming first argument is record ID
-                    operation = query.__name__
-                    
-                    if not self.lock_manager.acquire_lock(self.transaction_id, record_id, operation):
-                        print(f"Transaction {self.transaction_id}: Failed to acquire {operation} lock on {record_id}")
-                        self.abort()
-                        return False
-                    self.locks_held.add(record_id)
-                
-                # Execute all queries
-                for i, (query, table, args) in enumerate(self.queries):
-                    # Execute the query
-                    result = query(*args)
-                    
-                    if result is False:
-                        print(f"Transaction {self.transaction_id}: Query {i+1} failed")
-                        self.abort()
-                        return False
-                
-                # All queries succeeded, commit
-                return self.commit()
-                
+        # Ensure transaction_id is set
+        if not hasattr(self, 'transaction_id') or self.transaction_id is None:
+            self.transaction_id = id(self)
+        
+        # Check if there are any queries to run
+        if not self.queries:
+            return False
+        
+        # Get lock manager from the first query's table if not already set
+        if not hasattr(self, 'lock_manager') or self.lock_manager is None:
+            try:
+                # Extract table from the queries list based on your storage format
+                query, args = self.queries[0]
+                # Assuming the table is the first argument
+                if args and hasattr(args[0], 'database'):
+                    first_table = args[0]
+                    if hasattr(first_table, 'database') and first_table.database is not None:
+                        self.lock_manager = first_table.database.lock_manager
             except Exception as e:
-                print(f"Transaction {self.transaction_id}: Error during execution: {e}")
-                import traceback
-                traceback.print_exc()
-                self.abort()
-                return False
-
+                print(f"Error initializing lock manager: {e}")
+        
+        # Initialize locks_held if not already
+        if not hasattr(self, 'locks_held'):
+            self.locks_held = set()
+        
+        try:
+            # Execute all queries
+            for query, args in self.queries:
+                try:
+                    result = query(*args)
+                    if result is False:
+                        return self.abort()
+                except Exception as e:
+                    print(f"Error executing query: {e}")
+                    return self.abort()
+            
+            return self.commit()
+        except Exception as e:
+            print(f"Error in transaction execution: {e}")
+            return self.abort()
     
     def abort(self):
         """
