@@ -3,15 +3,9 @@ import traceback
 import time
 
 class TransactionWorker:
-
     """
-    # Creates a transaction worker object.
+    Manage and execute multiple transactions concurrently using threads
     """
-    def __init__(self, transactions = []):
-        self.stats = []
-        self.transactions = transactions
-        self.result = 0
-        pass
 
     def __init__(self, transactions=[]):
         """
@@ -29,10 +23,6 @@ class TransactionWorker:
         """
         self.transactions.append(t)
 
-        
-    """
-    Runs all transaction as a thread
-    """
     def run(self):
         """
         Starts execution of all transactions in a separate thread
@@ -42,9 +32,6 @@ class TransactionWorker:
         self.thread.daemon = True  # Make thread daemon so it doesn't block program exit
         self.thread.start()
 
-    """
-    Waits for the worker to finish
-    """
     def join(self):
         """
         Waits for worker thread to finish execution with timeout

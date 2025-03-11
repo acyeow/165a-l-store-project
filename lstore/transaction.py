@@ -1,15 +1,22 @@
 from lstore.table import Table, Record
 from lstore.index import Index
 import os
+from threading import Lock
 
 class Transaction:
 
     """
     # Creates a transaction object.
     """
-    def __init__(self):
+    def __init__(self, transaction_id=None, buffer_pool=None, lock_manager=None):
+        self.transaction_id = transaction_id if transaction_id is not None else id(self)
         self.queries = []
-        pass
+        self.rollback_operations = []
+        self.buffer_pool = buffer_pool
+        self.lock_manager = lock_manager
+        self.locks_held = set()
+        self.mutex = Lock()
+        self._deleted_records = {}
 
     """
     # Adds the given query to this transaction
@@ -103,7 +110,6 @@ class Transaction:
         self._deleted_records.clear()
         return False
 
-    
     def commit(self):
         """
         Commit the transaction, making all changes permanent
