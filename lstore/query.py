@@ -112,36 +112,23 @@ class Query:
         result = []
         for rid in rids:
             try:
-<<<<<<< Updated upstream
-=======
                 print(f"Found RID {rid} for key {search_key}")
                 
->>>>>>> Stashed changes
                 # Get the base record
                 base_rid = rid
 
                 # Get the latest version through indirection
                 latest_rid = self._get_latest_version(base_rid)
-<<<<<<< Updated upstream
-
-=======
                 print(f"Latest version RID for {search_key}: {latest_rid}")
                 
                 # Important: If we can't find the record in the page_directory, load it directly
                 if latest_rid not in self.table.page_directory:
                     print(f"Record {latest_rid} not in page_directory, loading directly")
                     
->>>>>>> Stashed changes
                 # Retrieve the record
                 record = self.table.find_record(
                     search_key, latest_rid, projected_columns_index
                 )
-<<<<<<< Updated upstream
-                result.append(record)
-            except Exception as e:
-                print(f"Error selecting record: {e}")
-
-=======
                 print(f"Retrieved record for {search_key}: {record.columns if record else 'None'}")
                 
                 if record and record.columns:
@@ -152,7 +139,6 @@ class Query:
                 import traceback
                 traceback.print_exc()
                 
->>>>>>> Stashed changes
         return result
 
     def _get_latest_version(self, rid):

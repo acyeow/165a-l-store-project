@@ -1,5 +1,6 @@
 from lstore.table import Table, Record
 from lstore.index import Index
+import os
 
 class Transaction:
 
@@ -24,14 +25,6 @@ class Transaction:
         
     # If you choose to implement this differently this method must still return True if transaction commits or False on abort
     def run(self):
-<<<<<<< Updated upstream
-        for query, args in self.queries:
-            result = query(*args)
-            # If the query has failed the transaction should abort
-            if result == False:
-                return self.abort()
-        return self.commit()
-=======
         with self.mutex:
             # Ensure transaction_id is set
             if self.transaction_id is None:
@@ -84,13 +77,9 @@ class Transaction:
                 traceback.print_exc()
                 self.abort()
                 return False
->>>>>>> Stashed changes
 
     
     def abort(self):
-<<<<<<< Updated upstream
-        #TODO: do roll-back and any other necessary operations
-=======
         """
         Abort the transaction and roll back any changes
         """
@@ -112,16 +101,10 @@ class Transaction:
         self.rollback_operations.clear()
         self.locks_held.clear()
         self._deleted_records.clear()
->>>>>>> Stashed changes
         return False
 
     
     def commit(self):
-<<<<<<< Updated upstream
-        # TODO: commit to database
-        return True
-
-=======
         """
         Commit the transaction, making all changes permanent
         """
@@ -158,4 +141,3 @@ class Transaction:
         # Flush all dirty pages if safe
         with self.mutex:
             self.buffer_pool.reset()
->>>>>>> Stashed changes

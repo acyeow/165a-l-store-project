@@ -231,54 +231,6 @@ class Bufferpool:
         Get a page from the bufferpool. If not in memory, load from disk.
         Returns the page data and pins the page.
         """
-<<<<<<< Updated upstream
-        # If page is in bufferpool, access it and update access time
-        if page_id in self.pages:
-            self.access_counter += 1
-            self.access_times[page_id] = self.access_counter
-            self.pins[page_id] = self.pins.get(page_id, 0) + 1
-            return self.pages[page_id][0]  # Return page_data
-
-        # If bufferpool is full, evict pages until space is available
-        while len(self.pages) >= self.size:
-            try:
-                self.evict_page()
-            except Exception:
-                # If no pages can be evicted, forcibly evict a page
-                if self.pages:
-                    # Find the page with the lowest pin count (even if it's 1)
-                    min_pin_page = min(self.pins, key=self.pins.get)
-                    self.write_dirty(min_pin_page, self.pages[min_pin_page][0])
-                    del self.pages[min_pin_page]
-                    del self.page_paths[min_pin_page]
-                    del self.pins[min_pin_page]
-                    del self.access_times[min_pin_page]
-                else:
-                    raise Exception("Cannot evict any pages from bufferpool")
-
-        # Construct the disk file path
-        page_path = self._construct_page_path(table_name, page_id)
-        self.page_paths[page_id] = page_path
-
-        # Load page from disk if it exists, otherwise create empty page
-        if os.path.exists(page_path):
-            try:
-                with open(page_path, "rb") as f:
-                    page_data = msgpack.unpackb(f.read(), raw=False)
-            except Exception as e:
-                print(f"Error reading page from disk: {e}")
-                page_data = self._create_empty_page(num_columns)
-        else:
-            page_data = self._create_empty_page(num_columns)
-
-        # Insert the page into the bufferpool
-        self.pages[page_id] = (page_data, False)  # Not dirty initially
-        self.pins[page_id] = 1  # Pin on load
-        self.access_counter += 1
-        self.access_times[page_id] = self.access_counter
-
-        return page_data
-=======
         try:
             composite_key = (table_name, page_id)
             print(f"Getting page {page_id} for table {table_name}")
@@ -352,7 +304,6 @@ class Bufferpool:
             
             # Return a minimal empty page to avoid crashes
             return self._create_empty_page(num_columns)
->>>>>>> Stashed changes
 
     def set_page(self, page_id, table_name, page_data, num_columns=None):
         """

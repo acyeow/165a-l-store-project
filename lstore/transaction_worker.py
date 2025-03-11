@@ -1,11 +1,6 @@
-<<<<<<< Updated upstream
-from lstore.table import Table, Record
-from lstore.index import Index
-=======
 from threading import Thread
 import traceback
 import time
->>>>>>> Stashed changes
 
 class TransactionWorker:
 
@@ -18,13 +13,6 @@ class TransactionWorker:
         self.result = 0
         pass
 
-<<<<<<< Updated upstream
-    
-    """
-    Appends t to transactions
-    """
-    def add_transaction(self, t):
-=======
     def __init__(self, transactions=[]):
         """
         Creates a TransactionWorker object
@@ -39,7 +27,6 @@ class TransactionWorker:
         """
         Adds a transaction to list of transactions to be executed
         """
->>>>>>> Stashed changes
         self.transactions.append(t)
 
         
@@ -47,11 +34,6 @@ class TransactionWorker:
     Runs all transaction as a thread
     """
     def run(self):
-<<<<<<< Updated upstream
-        pass
-        # here you need to create a thread and call __run
-    
-=======
         """
         Starts execution of all transactions in a separate thread
         """
@@ -59,24 +41,11 @@ class TransactionWorker:
         self.thread = Thread(target=self.__run)
         self.thread.daemon = True  # Make thread daemon so it doesn't block program exit
         self.thread.start()
->>>>>>> Stashed changes
 
     """
     Waits for the worker to finish
     """
     def join(self):
-<<<<<<< Updated upstream
-        pass
-
-
-    def __run(self):
-        for transaction in self.transactions:
-            # each transaction returns True if committed or False if aborted
-            self.stats.append(transaction.run())
-        # stores the number of transactions that committed
-        self.result = len(list(filter(lambda x: x, self.stats)))
-
-=======
         """
         Waits for worker thread to finish execution with timeout
         """
@@ -133,4 +102,3 @@ class TransactionWorker:
             import traceback
             traceback.print_exc()
             self.completed = True  # Mark as completed even on error
->>>>>>> Stashed changes
