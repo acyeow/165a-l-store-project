@@ -63,10 +63,6 @@ for i in range(num_threads):
 for i in range(num_threads):
     transaction_workers[i].join()
 
-# After all workers finish, add this debug code
-print(f"Page directory contains {len(grades_table.page_directory)} records")
-print(f"Index contains keys: {len(grades_table.index.indices.get(0, {}).keys())}")
-
 
 # Check inserted records using select query in the main thread outside workers
 for key in keys:

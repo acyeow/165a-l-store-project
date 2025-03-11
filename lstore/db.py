@@ -372,7 +372,7 @@ class Bufferpool:
         del self.pins[lru_page]
         del self.access_times[lru_page]
 
-    def unpin_page(self, page_id):
+    def unpin_page(self, page_id, table_name = None):
         """
         Decrement the pin count for a page.
         The page can be evicted only when pin count is 0.
