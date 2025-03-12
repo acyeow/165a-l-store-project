@@ -7,14 +7,14 @@ class TransactionWorker:
     Manage and execute multiple transactions concurrently using threads
     """
 
-    def __init__(self, transactions=[]):
+    def __init__(self, transactions=None):
         """
         Creates a TransactionWorker object
 
         transactions (list): A list of transactions to be executed by this worker
         """
         self.stats = []  # List to store  result of each transaction (True if committed, False if aborted)
-        self.transactions = transactions  # List of transactions to be executed
+        self.transactions = transactions if transactions is not None else []  # List of transactions to be executed
         self.result = 0  # Number of transactions that committed successfully
         self.thread = None  # Thread object for running transactions concurrently
 

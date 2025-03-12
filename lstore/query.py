@@ -600,10 +600,13 @@ class Query:
             # Create new tail RID
             tail_rid = (page_range_idx, tail_page_idx, len(tail_page_data["rid"]), "t")
 
-            # Prepare tail page columns, merging new and existing values
+            # We can try to get the original primary key from base record with base_rid
+            original_key = self.table.page_directory[base_rid].columns[self.table.key]
             tail_page_columns = []
             for i in range(self.table.num_columns):
-                if i < len(columns) and columns[i] is not None:
+                if i == self.table.key:
+                    tail_page_columns.append(original_key)
+                elif i < len(columns) and columns[i] is not None:
                     tail_page_columns.append(columns[i])
                 else:
                     tail_page_columns.append(current_record.columns[i] if i < len(current_record.columns) else 0)
@@ -653,6 +656,7 @@ class Query:
 
             return True
         except Exception as e:
+            print("Update error:", e)
             return False
 
     """

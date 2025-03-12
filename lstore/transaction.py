@@ -3,7 +3,7 @@ from lstore.index import Index
 from lstore.query import Query
 from lstore.db import LockManager
 import os
-from threading import Lock
+from threading import RLock
 
 class Transaction:
     def __init__(self, transaction_id=None, buffer_pool=None, lock_manager=None):
@@ -13,7 +13,7 @@ class Transaction:
         self.buffer_pool = buffer_pool  # Reference to buffer pool
         self.lock_manager = lock_manager  # Reference to lock manager
         self.locks_held = set()  # Set to track locks held by this transaction
-        self.mutex = Lock()  # Mutex Lock for thread-safe log writes
+        self.mutex = RLock()  # Mutex Lock for thread-safe log writes
         self._deleted_records = {} # Deleted records for rollback
 
     def add_query(self, query, table, *args):
@@ -26,8 +26,20 @@ class Transaction:
 
             # Store querying changes and its arguments as well as current state for potential rollback
             self.queries.append((query, table, args))
-            if query.__name__ in ["update", "insert", "delete"]:
-                self.rollback_operations.append((self._get_rollback_operation(query, table, args), args))
+            if query.__name__ == "update":
+                original_state = self._get_record_columns(table, args[0])
+                if original_state is not None:
+                    # Make a copy so that changes do not affect the stored state
+                    original_state = list(original_state)
+                    self.rollback_operations.append((lambda key, original_state=original_state: Query(table).update(key, *original_state), args))
+                else:
+                    self.rollback_operations.append((lambda key: None, args))
+            # For insert queries, we rollback by deleting the inserted record
+            elif query.__name__ == "insert":
+                self.rollback_operations.append((lambda key: Query(table).delete(key), args))
+            # For delete queries, since we might need to re-insert it we can store it
+            elif query.__name__ == "delete":
+                self.rollback_operations.append((lambda key: self._restore_deleted_record(table, key), args))
 
     # Helper function for possible rollback
     def _get_rollback_operation(self, query, table, args):

@@ -2,7 +2,7 @@ import os
 import msgpack
 from lstore.config import BUFFERPOOL_SIZE, MAX_BASE_PAGES, RECORDS_PER_PAGE, DEFAULT_DB_PATH
 from lstore.table import Table, Record
-from threading import Lock
+from threading import RLock
 
 
 
@@ -259,6 +259,7 @@ class Bufferpool:
         self.pins = {}  # page_id -> pin count
         self.access_times = {}  # page_id -> last_access_time
         self.access_counter = 0  # counter for tracking access order
+        self.lock = RLock()
 
     def get_page(self, page_id, table_name, num_columns=None):
         """
@@ -266,33 +267,18 @@ class Bufferpool:
         Returns the page data and pins the page.
         """
         composite_key = (table_name, page_id)
-        # If page is in bufferpool, access it and update access time
-        if composite_key in self.pages:
-            self.access_counter += 1
-            self.access_times[composite_key] = self.access_counter
-            self.pins[composite_key] = self.pins.get(composite_key, 0) + 1
-            return self.pages[composite_key][0]  # Return page_data
-
-        # If bufferpool is full, evict pages until space is available
-        while len(self.pages) >= self.size:
-            try:
-                self.evict_page()
-            except Exception:
-                # If no pages can be evicted, forcibly evict a page
-                if self.pages:
-                    # Find the page with the lowest pin count (even if it's 1)
-                    min_pin_page = min(self.pins, key=self.pins.get)
-                    self.write_dirty(min_pin_page, self.pages[min_pin_page][0])
-                    del self.pages[min_pin_page]
-                    del self.page_paths[min_pin_page]
-                    del self.pins[min_pin_page]
-                    del self.access_times[min_pin_page]
-                else:
-                    raise Exception("Cannot evict any pages from bufferpool")
+        with self.lock:
+            # If page is in bufferpool, access it and update access time
+            if composite_key in self.pages:
+                self.access_counter += 1
+                self.access_times[composite_key] = self.access_counter
+                self.pins[composite_key] = self.pins.get(composite_key, 0) + 1
+                return self.pages[composite_key][0]  # Return page_data
 
         # Construct the disk file path
         page_path = self._construct_page_path(table_name, page_id)
-        self.page_paths[page_id] = page_path
+        with self.lock:
+            self.page_paths[composite_key] = page_path
 
         # Load page from disk if it exists, otherwise create empty page
         if os.path.exists(page_path):
@@ -304,12 +290,16 @@ class Bufferpool:
                 page_data = self._create_empty_page(num_columns)
         else:
             page_data = self._create_empty_page(num_columns)
-
-        # Insert the page into the bufferpool
-        self.pages[composite_key] = (page_data, False)  # Not dirty initially
-        self.pins[composite_key] = 1  # Pin on load
-        self.access_counter += 1
-        self.access_times[composite_key] = self.access_counter
+            
+        with self.lock:
+            # If bufferpool is full, evict pages until space is available
+            while len(self.pages) >= self.size:
+                self.evict_page()
+            # Insert the page into the bufferpool
+            self.pages[composite_key] = (page_data, False)  # Not dirty initially
+            self.pins[composite_key] = 1  # Pin on load
+            self.access_counter += 1
+            self.access_times[composite_key] = self.access_counter
 
         return page_data
 
@@ -320,21 +310,22 @@ class Bufferpool:
         composite_key = (table_name, page_id)
         
         # If bufferpool is full, evict pages until space is available
-        while len(self.pages) >= self.size:
-            try:
-                self.evict_page()
-            except Exception:
-                # If no pages can be evicted, forcibly evict a page
-                if self.pages:
-                    # Find the page with the lowest pin count (even if it's 1)
-                    min_pin_page = min(self.pins, key=self.pins.get)
-                    self.write_dirty(min_pin_page, self.pages[min_pin_page][0])
-                    del self.pages[min_pin_page]
-                    del self.page_paths[min_pin_page]
-                    del self.pins[min_pin_page]
-                    del self.access_times[min_pin_page]
-                else:
-                    raise Exception("Cannot evict any pages from bufferpool")
+        with self.lock:
+            while len(self.pages) >= self.size:
+                try:
+                    self.evict_page()
+                except Exception:
+                    # If no pages can be evicted, forcibly evict a page
+                    if self.pages:
+                        # Find the page with the lowest pin count (even if it's 1)
+                        min_pin_page = min(self.pins, key=self.pins.get)
+                        self.write_dirty(min_pin_page, self.pages[min_pin_page][0])
+                        del self.pages[min_pin_page]
+                        del self.page_paths[min_pin_page]
+                        del self.pins[min_pin_page]
+                        del self.access_times[min_pin_page]
+                    else:
+                        raise Exception("Cannot evict any pages from bufferpool")
 
         # Construct page path and store it
         page_path = self._construct_page_path(table_name, page_id)
@@ -352,27 +343,28 @@ class Bufferpool:
         If the page is dirty, write it to disk first.
         """
         # Find the least recently used unpinned page
-        comp_key_evict = None
-        oldest_access = float("inf")
+        with self.lock:
+            comp_key_evict = None
+            oldest_access = float("inf")
 
-        for comp_key, access_time in self.access_times.items():
-            if self.pins.get(comp_key, 0) == 0 and access_time < oldest_access:
-                oldest_access = access_time
-                comp_key_evict = comp_key
+            for comp_key, access_time in list(self.access_times.items()):
+                if self.pins.get(comp_key, 0) == 0 and access_time < oldest_access:
+                    oldest_access = access_time
+                    comp_key_evict = comp_key
 
-        if comp_key_evict is None:
-            raise Exception("No unpinned page available for eviction.")
+            if comp_key_evict is None:
+                raise Exception("No unpinned page available for eviction.")
 
-        # If the page is dirty, write it to disk
-        page_data, is_dirty = self.pages[comp_key_evict]
-        if is_dirty:
-            self.write_dirty(comp_key_evict, page_data)
+            # If the page is dirty, write it to disk
+            page_data, is_dirty = self.pages[comp_key_evict]
+            if is_dirty:
+                self.write_dirty(comp_key_evict, page_data)
 
-        # Remove the page from the bufferpool
-        del self.pages[comp_key_evict]
-        del self.page_paths[comp_key_evict]
-        del self.pins[comp_key_evict]
-        del self.access_times[comp_key_evict]
+            # Remove the page from the bufferpool
+            del self.pages[comp_key_evict]
+            del self.page_paths[comp_key_evict]
+            del self.pins[comp_key_evict]
+            del self.access_times[comp_key_evict]
 
     def unpin_page(self, page_id, table_name = None):
         """
@@ -381,8 +373,9 @@ class Bufferpool:
         """
         # If there is a table_name, use composite key, otherwise we just use page_id
         composite_key = (table_name, page_id) if table_name is not None else page_id
-        if composite_key in self.pins and self.pins[composite_key] > 0:
-            self.pins[composite_key] -= 1
+        with self.lock:
+            if composite_key in self.pins and self.pins[composite_key] > 0:
+                self.pins[composite_key] -= 1
 
     def _create_empty_page(self, num_columns):
         """Create an empty page data structure with the expected format."""
@@ -399,33 +392,35 @@ class Bufferpool:
         """
         Write a dirty page back to disk.
         """
-        if composite_key in self.page_paths:
-            path = self.page_paths[composite_key]
-            # Ensure directory exists
-            os.makedirs(os.path.dirname(path), exist_ok=True)
+        with self.lock:
+            if composite_key in self.page_paths:
+                path = self.page_paths[composite_key]
+                # Ensure directory exists
+                os.makedirs(os.path.dirname(path), exist_ok=True)
 
-            # Serialize and write data
-            with open(path, "wb") as f:
-                f.write(msgpack.packb(page_data, use_bin_type=True))
+                # Serialize and write data
+                with open(path, "wb") as f:
+                    f.write(msgpack.packb(page_data, use_bin_type=True))
 
-            # Mark page as clean
-            if composite_key in self.pages:
-                self.pages[composite_key] = (page_data, False)
+                # Mark page as clean
+                if composite_key in self.pages:
+                    self.pages[composite_key] = (page_data, False)
 
     def reset(self):
         """
         Write all dirty pages to disk and clear the bufferpool.
         """
-        for composite_key, (page_data, is_dirty) in self.pages.items():
-            if is_dirty:
-                self.write_dirty(composite_key, page_data)
+        with self.lock:
+            for composite_key, (page_data, is_dirty) in self.pages.items():
+                if is_dirty:
+                    self.write_dirty(composite_key, page_data)
 
-        # Clear all bufferpool data structures
-        self.pages.clear()
-        self.page_paths.clear()
-        self.pins.clear()
-        self.access_times.clear()
-        self.access_counter = 0
+            # Clear all bufferpool data structures
+            self.pages.clear()
+            self.page_paths.clear()
+            self.pins.clear()
+            self.access_times.clear()
+            self.access_counter = 0
 
     def _construct_page_path(self, table_name, page_id):
         """
@@ -457,7 +452,7 @@ class LockManager:
         - self.mutex: A threading Lock to ensure thread-safe access to the locks dictionary.
         """
         self.locks = {}  # key: rid, value: (set of shared lock tids, exclusive lock tid or None)
-        self.mutex = Lock()
+        self.mutex = RLock()
 
     def acquire_lock(self, transaction_id, record_id, operation):
         """
