@@ -14,6 +14,22 @@ class Database:
         self.bufferpool_size = BUFFERPOOL_SIZE
         self.lock_manager = LockManager()
         self.open(DEFAULT_DB_PATH)
+        self.create_grades_table()
+
+    def create_grades_table(self):
+        """
+        Creates a predefined 'grades' table 
+        """
+
+        table_name = "Grades"
+        num_columns = 5  
+        key_index = 0 
+
+        # Check if the table already exists, create the grades table if not
+        if any(table.name == table_name for table in self.tables):
+            print(f"Table '{table_name}' already exists.")
+            return
+        grades_table = self.create_table(table_name, num_columns, key_index)
 
     def open(self, path):
         """
