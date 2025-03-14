@@ -248,7 +248,7 @@ class Query:
                     result.append(Record(base_rid, search_key, projected_values))
             elif relative_version == 0:
                 # For version 0, get the latest version by following indirection
-                target_rid = self._safely_get_latest_version(base_rid)
+                target_rid = self._get_latest_version(base_rid)
                 projected_values = []
                 for i, flag in enumerate(projected_columns_index):
                     if flag == 1:
