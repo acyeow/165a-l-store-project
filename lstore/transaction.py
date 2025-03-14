@@ -3,10 +3,12 @@ from lstore.index import Index
 from lstore.query import Query
 from lstore.db import LockManager
 import os
+import time
+import random
 from threading import RLock
 
 class Transaction:
-    def __init__(self, transaction_id=None, buffer_pool=None, lock_manager=None):
+    def __init__(self, transaction_id=None, buffer_pool=None, lock_manager=None, max_retries=3, base_delay=0.1, max_delay = 1.0):
         self.transaction_id = transaction_id if transaction_id is not None else id(self)  # Unique ID for transaction
         self.queries = []  # List to store queries and their arguments
         self.rollback_operations = []  # List of tuples to store operations for rollback
@@ -15,6 +17,77 @@ class Transaction:
         self.locks_held = set()  # Set to track locks held by this transaction
         self.mutex = RLock()  # Mutex Lock for thread-safe log writes
         self._deleted_records = {} # Deleted records for rollback
+        
+        # Retry configuration
+        self.max_retries = max_retries  # Maximum number of retry attempts
+        self.base_delay = base_delay  # Base delay between retries
+        self.max_delay = max_delay
+        self.current_retry = 0
+
+    def _run_with_retry(self):
+        """
+        Internal method to run transaction with retry logic.
+        
+        :return: True if transaction succeeded, False if all retries failed
+        """
+        while self.current_retry < self.max_retries:
+            try:
+                # Reset transaction state
+                self.locks_held.clear()
+                self._deleted_records.clear()
+                
+                # Get locks, abort if fail
+                for query, table, args in self.queries:
+                    record_id = args[0]  # Assuming first argument is record ID
+                    operation = query.__name__
+                    
+                    if not self.lock_manager.acquire_lock(self.transaction_id, record_id, operation):
+                        raise Exception("Lock acquisition failed")
+                    
+                    self.locks_held.add(record_id)
+                
+                # Execute all queries
+                for i, (query, table, args) in enumerate(self.queries):
+                    # Store the query if it is delete
+                    if query.__name__ == "delete":
+                        columns = self._get_record_columns(table, args[0])
+                        if columns is not None:
+                            self._deleted_records[args[0]] = columns
+                    # Store the query if it is insert
+                    elif query.__name__ == "insert":
+                        self._deleted_records[args[0]] = args
+                    
+                    # Execute the query
+                    result = query(*args)
+                    
+                    if result is False:
+                        raise Exception("Query execution failed")
+                
+                # If all queries succeed, commit and return True
+                return self.commit()
+            
+            except Exception as e:
+                # Abort the transaction
+                self.abort()
+                
+                # If it's the last retry, return False
+                if self.current_retry == self.max_retries - 1:
+                    return False
+                
+                # Calculate exponential backoff with jitter
+                delay = min(
+                    self.max_delay, 
+                    self.base_delay * (2 ** self.current_retry) * (1 + random.random())
+                )
+                
+                # Wait before next retry
+                time.sleep(delay)
+                
+                # Increment retry counter
+                self.current_retry += 1
+        
+        # If we've exhausted all retries
+        return False
 
     def add_query(self, query, table, *args):
         with self.mutex:
@@ -150,6 +223,8 @@ class Transaction:
             self.rollback_operations.clear()
             self.locks_held.clear()
             self._deleted_records.clear()
+
+            self._run_with_retry()
             return False
 
     def commit(self):
