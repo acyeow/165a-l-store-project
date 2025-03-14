@@ -511,7 +511,6 @@ class Query:
 
         with self.table.lock:
             try:
-            
                 page_range = self.table.page_ranges[page_range_idx]
                 base_page_id = ("base", page_range_idx, page_idx)
                 base_page_data = self.table.database.bufferpool.get_page(
@@ -522,12 +521,16 @@ class Query:
                 latest_rid = self._get_latest_version(base_rid)
                 current_record = self.table.page_directory[latest_rid]
 
-                # Build updated_columns by copying the current record and replacing provided fields.
-                updated_columns = current_record.columns[:]  
+                # Build updated_columns by copying the current record and replacing provided fields
+                updated_columns_list = list(current_record.columns)  
                 for i in range(self.table.num_columns):
                     if i < len(columns) and columns[i] is not None:
-                        updated_columns[i] = columns[i]
-                tail_page_columns = updated_columns[:] 
+                        updated_columns_list[i] = columns[i]
+
+                # Check if the updated primary key would create a duplicate
+                if columns[self.table.key] is not None and columns[self.table.key] != primary_key:
+                    if self.table.index.locate(self.table.key, columns[self.table.key]):
+                        return False
 
                 # Create a tail page if needed
                 if not page_range.tail_pages or not page_range.tail_pages[-1].has_capacity():
@@ -540,6 +543,7 @@ class Query:
                 # Get the in-memory tail page
                 tail_page = page_range.tail_pages[tail_page_idx]
 
+                # Prepare tail page data if not existing
                 if "columns" not in tail_page_data:
                     tail_page_data["columns"] = [[] for _ in range(self.table.num_columns)]
                 if "indirection" not in tail_page_data:
@@ -551,6 +555,7 @@ class Query:
                 if "schema_encoding" not in tail_page_data:
                     tail_page_data["schema_encoding"] = []
 
+                # Generate schema encoding based on updated columns
                 schema = ["0"] * self.table.num_columns
                 for i in range(self.table.num_columns):
                     if i < len(columns) and columns[i] is not None:
@@ -564,20 +569,20 @@ class Query:
 
                 # Write the new tail record
                 for i in range(self.table.num_columns):
-                    tail_page_data["columns"][i].append(tail_page_columns[i])
+                    tail_page_data["columns"][i].append(updated_columns_list[i])
                 tail_page_data["indirection"].append(latest_rid)
                 tail_page_data["rid"].append(tail_rid)
                 tail_page_data["timestamp"].append(timestamp)
                 tail_page_data["schema_encoding"].append(schema_str)
 
-                # update the in-memory tail page metadata
+                # Update the in-memory tail page metadata
                 tail_page.indirection.append(latest_rid)
                 tail_page.rid.append(tail_rid)
                 tail_page.start_time.append(timestamp)
                 tail_page.schema_encoding.append(schema_str)
                 tail_page.num_records += 1
 
-                # update the base page indirection 
+                # Update the base page indirection 
                 base_page_data["indirection"][record_idx] = tail_rid
                 self.table.database.bufferpool.set_page(
                     base_page_id, self.table.name, base_page_data
@@ -586,13 +591,14 @@ class Query:
                     tail_page_id, self.table.name, tail_page_data
                 )
 
-                # update the page directory with the new record
+                # Update the page directory with the new record
                 new_key = (columns[self.table.key]
                         if len(columns) > self.table.key and columns[self.table.key] is not None and columns[self.table.key] != primary_key
                         else primary_key)
-                new_record = Record(tail_rid, primary_key, tail_page_columns)
+                new_record = Record(tail_rid, new_key, updated_columns_list)
                 self.table.page_directory[tail_rid] = new_record
 
+                # Handle key updates in index and page directory
                 if new_key != primary_key:
                     if latest_rid in self.table.page_directory:
                         del self.table.page_directory[latest_rid]
@@ -604,23 +610,19 @@ class Query:
                 self.table.database.bufferpool.unpin_page(tail_page_id, self.table.name)
                 self.table.database.bufferpool.unpin_page(base_page_id, self.table.name)
 
+                # Trigger merge if necessary
                 self.table.merge_counter += 1
                 from lstore.config import MERGE_THRESHOLD
                 if self.table.merge_counter >= MERGE_THRESHOLD:
                     self.table.merge_counter = 0
                     self.table.trigger_merge()
-                    
-                #print("Base indirection before:", base_page_data["indirection"][record_idx])
-                #print("New tail RID:", tail_rid)
-                base_page_data["indirection"][record_idx] = tail_rid
-                #print("Base indirection after:", base_page_data["indirection"][record_idx])
 
                 return True
 
             except Exception as e:
-                #print("Update error:", e)
+                # Uncomment the following line for detailed error tracking
+                # print(f"Update error: {e}")
                 return False
-
 
     """
     :param start_range: int         # Start of the key range to aggregate 
