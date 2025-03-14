@@ -233,11 +233,13 @@ class BPlusTree:
             self.fix_structure(parent)
 
 class Index:
-    def __init__(self, table, t=3):
+    def __init__(self, table, t=3, lock_manager=None):
         # One index for each table. All are empty initially
         self.table = table
         self.t = t
         self.indices = {}
+        from lstore.db import LockManager
+        self.lock_manager = lock_manager or LockManager()
 
     """
     # returns the location of all records with the given value on column "column"
@@ -269,9 +271,24 @@ class Index:
             value = record.columns[column_number]
             self.indices[column_number].insert(value, rid)
 
-    def insert(self, column_value, rid):
+    def insert(self, column_value, rid, transaction_id=None):
+        if transaction_id:
+            # Acquire an exclusive lock for insertion
+            if not self.lock_manager.acquire_lock(transaction_id, column_value, "insert"):
+                return False
+            # Check for duplicates on the primary key index
+            if self.table.key in self.indices and self.indices[self.table.key].search(column_value):
+                self.lock_manager.release_lock(transaction_id, column_value)
+                return False
+
+        # Perform the insertion
         for column_number, tree in self.indices.items():
             tree.insert(column_value, rid)
+
+        if transaction_id:
+            self.lock_manager.release_lock(transaction_id, column_value)
+        return True
+
     """
     # optional: Drop index of specific column
     """
@@ -281,6 +298,14 @@ class Index:
 
 
     # Delete a value from the index
-    def delete(self, column_value, rid):
+    def delete(self, column_value, rid, transaction_id=None):
+        if transaction_id:
+            if not self.lock_manager.acquire_lock(transaction_id, column_value, "delete"):
+                return False
+
         for column_number, tree in self.indices.items():
             tree.delete(column_value, rid)
+
+        if transaction_id:
+            self.lock_manager.release_lock(transaction_id, column_value)
+        return True
