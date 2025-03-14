@@ -80,7 +80,7 @@ class Query:
             return True
 
         except Exception as e:
-            print(f"Error deleting record with key {primary_key}: {e}")
+            #print(f"Error deleting record with key {primary_key}: {e}")
             return False
 
     """
@@ -116,10 +116,10 @@ class Query:
         try:
             # Insert the record
             result = self.table.insert_record(start_time, schema_encoding, *columns)
-            print(f"Insert result for key {key}: {result}")
+            #print(f"Insert result for key {key}: {result}")
             return result
         except Exception as e:
-            print(f"Insert error for key {key}: {e}")
+            #print(f"Insert error for key {key}: {e}")
             return False
 
     """
@@ -165,7 +165,8 @@ class Query:
                 result.append(record)
                 
             except Exception as e:
-                print(f"Error selecting record: {e}")
+                #print(f"Error selecting record: {e}")
+                return None
                 
         return result
 
@@ -193,7 +194,7 @@ class Query:
                 candidate = tuple(candidate)
             return candidate
         except Exception as e:
-            print(f"Error in _get_latest_version: {e}")
+            #print(f"Error in _get_latest_version: {e}")
             return rid
         finally:
             self.table.database.bufferpool.unpin_page(base_page_id, self.table.name)
@@ -302,13 +303,11 @@ class Query:
 
             # Positive versions not supported
             else:
-                print(f"Positive relative_version {relative_version} not supported")
+                #print(f"Positive relative_version {relative_version} not supported")
                 return None
 
         except Exception as e:
-            print(
-                f"Error navigating to version {relative_version} from {base_rid}: {e}"
-            )
+            #print(f"Error navigating to version {relative_version} from {base_rid}: {e}")
             return None
 
     def _safely_get_latest_version(self, rid):
@@ -341,7 +340,7 @@ class Query:
             return rid
 
         except Exception as e:
-            print(f"Error in _safely_get_latest_version: {e}")
+            #print(f"Error in _safely_get_latest_version: {e}")
             return rid
 
     def _safely_get_historical_version(self, current_rid, base_rid, steps_back):
@@ -421,7 +420,7 @@ class Query:
             return chain[-1]
 
         except Exception as e:
-            print(f"Error getting historical version: {e}")
+            #print(f"Error getting historical version: {e}")
             return base_rid
 
     def _get_column_value(self, rid, column_index):
@@ -467,7 +466,8 @@ class Query:
                 # Ensure it's returned as an integer
                 return int(value) if value is not None else 0
         except Exception as e:
-            print(f"Error getting column value: {e}")
+            #print(f"Error getting column value: {e}")
+            return None
 
         return 0  # Return 0 instead of None to avoid type issues
 
@@ -596,15 +596,15 @@ class Query:
                     self.table.merge_counter = 0
                     self.table.trigger_merge()
                     
-                print("Base indirection before:", base_page_data["indirection"][record_idx])
-                print("New tail RID:", tail_rid)
+                #print("Base indirection before:", base_page_data["indirection"][record_idx])
+                #print("New tail RID:", tail_rid)
                 base_page_data["indirection"][record_idx] = tail_rid
-                print("Base indirection after:", base_page_data["indirection"][record_idx])
+                #print("Base indirection after:", base_page_data["indirection"][record_idx])
 
                 return True
 
             except Exception as e:
-                print("Update error:", e)
+                #print("Update error:", e)
                 return False
 
 
@@ -643,7 +643,8 @@ class Query:
                 if value is not None:
                     total_sum += value
             except Exception as e:
-                print(f"Error processing record for sum: {e}")
+                #print(f"Error processing record for sum: {e}")
+                return None
 
         return total_sum
 
@@ -686,7 +687,8 @@ class Query:
             ):
                 return page.pages[column_index].read(record_idx, 1)[0]
         except Exception as e:
-            print(f"Error getting column value: {e}")
+            #print(f"Error getting column value: {e}")
+            return None
 
         return None
 
@@ -759,7 +761,8 @@ class Query:
                         total_sum += int(value)
 
             except Exception as e:
-                print(f"Error in sum_version for RID {base_rid}: {e}")
+                #print(f"Error in sum_version for RID {base_rid}: {e}")
+                return None
 
         return total_sum
 

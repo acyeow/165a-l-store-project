@@ -286,7 +286,7 @@ class Bufferpool:
                 with open(page_path, "rb") as f:
                     page_data = msgpack.unpackb(f.read(), raw=False)
             except Exception as e:
-                print(f"Error reading page from disk: {e}")
+                #print(f"Error reading page from disk: {e}")
                 page_data = self._create_empty_page(num_columns)
         else:
             page_data = self._create_empty_page(num_columns)
@@ -466,7 +466,7 @@ class LockManager:
         Returns:
             bool: True if the lock was acquired and False otherwise
         """
-        print(f"LockManager: transaction {transaction_id} requesting {operation} lock on record {record_id}")
+        #print(f"LockManager: transaction {transaction_id} requesting {operation} lock on record {record_id}")
         with self.mutex:
             # Determine the lock type based on the operation
             lock_type = "exclusive" if operation in ["update", "insert", "delete"] else "shared"
@@ -481,9 +481,9 @@ class LockManager:
                 # Allow shared lock if no exclusive lock exists or if this transaction already holds the exclusive lock
                 if exclusive_lock_tid is None or exclusive_lock_tid == transaction_id:
                     shared_lock_tids.add(transaction_id)
-                    print(f"LockManager: Granted shared lock to transaction {transaction_id} on record {record_id}")
+                    #print(f"LockManager: Granted shared lock to transaction {transaction_id} on record {record_id}")
                     return True
-                print(f"LockManager: Denied shared lock to transaction {transaction_id} on record {record_id}")
+                #print(f"LockManager: Denied shared lock to transaction {transaction_id} on record {record_id}")
                 return False
 
             elif lock_type == "exclusive":
@@ -496,9 +496,9 @@ class LockManager:
                         (shared_lock_tids == {transaction_id} and exclusive_lock_tid is None):
                     # Upgrade or set exclusive lock
                     self.locks[record_id] = (set(), transaction_id)
-                    print(f"LockManager: Granted exclusive lock to transaction {transaction_id} on record {record_id}")
+                    #print(f"LockManager: Granted exclusive lock to transaction {transaction_id} on record {record_id}")
                     return True
-                print(f"LockManager: Denied exclusive lock to transaction {transaction_id} on record {record_id}")
+                #print(f"LockManager: Denied exclusive lock to transaction {transaction_id} on record {record_id}")
                 return False
 
     def release_lock(self, transaction_id, record_id):

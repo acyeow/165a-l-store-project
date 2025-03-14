@@ -82,11 +82,11 @@ class Transaction:
             if self.transaction_id is None:
                 self.transaction_id = id(self)
             
-            print(f"Transaction {self.transaction_id} started with {len(self.queries)} queries")
+            #print(f"Transaction {self.transaction_id} started with {len(self.queries)} queries")
             
             # Ensure buffer_pool and lock_manager are available
             if not self.queries:
-                print("No queries to execute")
+                #print("No queries to execute")
                 return False
                 
             if self.buffer_pool is None or self.lock_manager is None:
@@ -97,24 +97,24 @@ class Transaction:
                     self.lock_manager = first_table.database.lock_manager
                     
             if self.lock_manager is None:
-                print("Failed to get lock_manager")
+                #print("Failed to get lock_manager")
                 return False
                 
             # Get locks, abort if fail
             for query, table, args in self.queries:
                 record_id = args[0]  # Assuming first argument is record ID
                 operation = query.__name__
-                print(f"Acquiring {operation} lock on record {record_id}")
+                #print(f"Acquiring {operation} lock on record {record_id}")
                 
                 if not self.lock_manager.acquire_lock(self.transaction_id, record_id, operation):
-                    print(f"Failed to acquire lock for {operation} on record {record_id}")
+                    #print(f"Failed to acquire lock for {operation} on record {record_id}")
                     return self.abort()  # Ensure abort returns False
                     
                 self.locks_held.add(record_id)
             
             # Execute all queries
             for i, (query, table, args) in enumerate(self.queries):
-                print(f"Executing query {i+1}/{len(self.queries)}: {query.__name__}")
+                #print(f"Executing query {i+1}/{len(self.queries)}: {query.__name__}")
                 
                 # Store the query if it is delete
                 if query.__name__ == "delete":
@@ -127,13 +127,13 @@ class Transaction:
                     
                 # Execute the query
                 result = query(*args)
-                print(f"Query result: {result}")
+                #print(f"Query result: {result}")
                 
                 if result is False:
-                    print(f"Query {i+1} failed, aborting transaction")
+                    #print(f"Query {i+1} failed, aborting transaction")
                     return self.abort()  # Ensure abort returns False
                     
-            print(f"All queries succeeded, committing transaction {self.transaction_id}")
+            #print(f"All queries succeeded, committing transaction {self.transaction_id}")
             return self.commit()  # Ensure commit returns True
 
     def abort(self):

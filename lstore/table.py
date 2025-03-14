@@ -24,7 +24,7 @@ class Record:
         return str(self.columns)
 
     def __repr__(self):
-        # This makes the record print like a list in error messages
+        # This makes the record #print like a list in error messages
         return str(self.columns)
 
 
@@ -111,7 +111,7 @@ class Table:
                             values.append(0)
                     except Exception as e:
                         # Handle any errors, defaulting to 0
-                        print(f"Error reading column {i} value: {e}")
+                        #print(f"Error reading column {i} value: {e}")
                         values.append(0)
 
             # Unpin the page when done
@@ -182,7 +182,8 @@ class Table:
                     try:
                         base_page.pages[i].write(value)
                     except Exception as e:
-                        print(f"Warning: Failed to write to direct page: {e}")
+                        #print(f"Warning: Failed to write to direct page: {e}")
+                        return None
 
                 # Update the page in the bufferpool
                 self.database.bufferpool.set_page(page_identifier, self.name, page_data)
@@ -207,7 +208,7 @@ class Table:
 
                 return True
             except Exception as e:
-                print(f"Error in insert_record: {e}")
+                #print(f"Error in insert_record: {e}")
                 return False
 
     def update(self, primary_key, *columns):
@@ -229,17 +230,17 @@ class Table:
 
             # Ensure the indices are valid
             if page_range_index >= len(self.page_ranges):
-                print(f"Invalid page_range_index: {page_range_index}")
+                #print(f"Invalid page_range_index: {page_range_index}")
                 return False
             page_range = self.page_ranges[page_range_index]
 
             if page_index >= len(page_range.base_pages):
-                print(f"Invalid page_index: {page_index}")
+                #print(f"Invalid page_index: {page_index}")
                 return False
             base_page = page_range.base_pages[page_index]
 
             if record_index >= len(base_page.indirection):
-                print(f"Invalid record_index: {record_index}")
+                #print(f"Invalid record_index: {record_index}")
                 return False
 
             # Get the current record
@@ -279,13 +280,13 @@ class Table:
         self.page_ranges.append(page_range)
 
     def trigger_merge(self):
-        # print("<----triggering merge---->")
+        # #print("<----triggering merge---->")
         merge_thread = threading.Thread(target=self.merge)
         merge_thread.start()
 
     def merge(self):
         with self.lock:
-            # print("<----merging---->")
+            # #print("<----merging---->")
             for page_range in self.page_ranges:
                 merged_base_pages = []
                 for base_page in page_range.base_pages:
@@ -385,7 +386,7 @@ class Table:
                 page_range.base_pages = merged_base_pages
                 page_range.num_base_pages = len(merged_base_pages)
 
-            # print("<----merging complete---->")
+            # #print("<----merging complete---->")
 
     def read_column_from_page(
         self, page_range_id, page_id, column_id, record_id, is_base_page=True
