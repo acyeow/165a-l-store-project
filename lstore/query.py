@@ -178,27 +178,41 @@ class Query:
         candidate = rid
         page_range_idx, page_idx, record_idx, page_type = rid
         base_page_id = ("base", page_range_idx, page_idx)
+        
         try:
             base_page_data = self.table.database.bufferpool.get_page(
                 base_page_id, self.table.name, self.table.num_columns
             )
+                        
             # Use the base RID as default
             candidate = rid
             indirections = base_page_data.get("indirection", [])
+            
             if record_idx < len(indirections):
                 temp = indirections[record_idx]
-                # If the pointer is None or marks deletion, keep the base RID
-                if temp is not None and temp != ["empty"]:
-                    candidate = temp
-            if isinstance(candidate, list):
-                candidate = tuple(candidate)
+                
+                # Handle different possible indirection types
+                if temp is not None:
+                    if temp == ["empty"]:
+                        return rid
+                    elif isinstance(temp, list):
+                        # Convert list to tuple if needed
+                        candidate = tuple(temp)
+                    elif isinstance(temp, tuple):
+                        candidate = temp
+                    else:
+                        print(f"Unexpected indirection type: {type(temp)}")
+                        return rid
+                else:
+                    print("Indirection is None, using original RID")
+            
             return candidate
+        
         except Exception as e:
-            #print(f"Error in _get_latest_version: {e}")
+            print(f"Error in _get_latest_version: {e}")
             return rid
         finally:
             self.table.database.bufferpool.unpin_page(base_page_id, self.table.name)
-
 
     """
     # Read matching record with specified search key
