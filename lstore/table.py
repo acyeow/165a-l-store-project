@@ -259,7 +259,7 @@ class Table:
             start_time = datetime.now().strftime("%Y%m%d%H%M%S")
             tail_page.insert_tail_page_record(*columns, record=record)
             tail_page.start_time.append(start_time)
-            tail_page.indirection.append(rid)
+            tail_page.indirection.append(current_rid)
 
             # Update the base page indirection
             new_record_index = tail_page.num_records - 1
