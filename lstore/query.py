@@ -146,9 +146,7 @@ class Query:
             try:
                 # If part of a transaction, acquire shared lock
                 if self.transaction and self.lock_manager:
-                    if not self.lock_manager.acquire_lock(
-                        self.transaction.transaction_id, search_key, "read"
-                    ):
+                    if not self.lock_manager.acquire_lock(self.transaction.transaction_id, search_key, "read"):
                         return []  # Can't acquire lock, return empty result
                     self.transaction.locks_held.add(search_key)
                     
@@ -157,11 +155,10 @@ class Query:
                 
                 # Get the latest version through indirection
                 latest_rid = self._get_latest_version(base_rid)
-                
+                print(f"Latest RID: {latest_rid}")
                 # Retrieve the record
-                record = self.table.find_record(
-                    search_key, latest_rid, projected_columns_index
-                )
+                record = self.table.find_record(search_key, latest_rid, projected_columns_index)
+                print(f"Record found: {record}")
                 result.append(record)
                 
             except Exception as e:
