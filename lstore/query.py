@@ -116,7 +116,7 @@ class Query:
         try:
             # Insert the record
             result = self.table.insert_record(start_time, schema_encoding, *columns)
-            print(f"Insert result for key {key}: {result}")
+            # print(f"Insert result for key {key}: {result}")
             return result
         except Exception as e:
             print(f"Insert error for key {key}: {e}")
