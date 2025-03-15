@@ -51,22 +51,19 @@ for i in range(num_threads):
     transaction_workers.append(TransactionWorker())
     
 for i in range(number_of_transactions):
-    
     transaction_workers[i % num_threads].add_transaction(insert_transactions[i])
 
 
 
 # run transaction workers
 for i in range(num_threads):
-    print("hiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii " + str(i))
     transaction_workers[i].run()
-
 
 # wait for workers to finish
 for i in range(num_threads):
-    print("hiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii " + str(i))
     transaction_workers[i].join()
-transaction_workers[1].join()
+
+
 # Check inserted records using select query in the main thread outside workers
 for key in keys:
     record = query.select(key, 0, [1, 1, 1, 1, 1])[0]
@@ -80,5 +77,6 @@ for key in keys:
         pass
         # print('select on', key, ':', record)
 print("Select finished")
+
 
 db.close()
