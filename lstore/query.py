@@ -173,30 +173,23 @@ class Query:
         """
         Helper to get the latest version of a record by following indirection.
         """
-        # Get pages from bufferpool
-        candidate = rid
         page_range_idx, page_idx, record_idx, page_type = rid
-        base_page_id = ("base", page_range_idx, page_idx)
-        try:
-            base_page_data = self.table.database.bufferpool.get_page(
-                base_page_id, self.table.name, self.table.num_columns
-            )
-            # Use the base RID as default
-            candidate = rid
-            indirections = base_page_data.get("indirection", [])
-            if record_idx < len(indirections):
-                temp = indirections[record_idx]
-                # If the pointer is None or marks deletion, keep the base RID
-                if temp is not None and temp != ["empty"]:
-                    candidate = temp
-            if isinstance(candidate, list):
-                candidate = tuple(candidate)
-            return candidate
-        except Exception as e:
-            print(f"Error in _get_latest_version: {e}")
+        # If the record is already a tail record, return it
+        if page_type != "b":
             return rid
-        finally:
-            self.table.database.bufferpool.unpin_page(base_page_id, self.table.name)
+
+        # Get the in-memory base page from the table page ranges
+        page_range = self.table.page_ranges[page_range_idx]
+        base_page = page_range.base_pages[page_idx]
+        
+        # Use the up-to-date in-memory indirection pointer
+        if record_idx < len(base_page.indirection):
+            candidate = base_page.indirection[record_idx]
+            if candidate is not None and candidate != ["empty"]:
+                if isinstance(candidate, list):
+                    candidate = tuple(candidate)
+                return candidate
+        return rid
 
 
     """
@@ -496,6 +489,8 @@ class Query:
         page_range_idx, page_idx, record_idx, page_type = base_rid
 
         with self.table.lock:
+            # Initialize tail_rid so it's always defined.
+            tail_rid = None
             try:
             
                 page_range = self.table.page_ranges[page_range_idx]
@@ -565,6 +560,8 @@ class Query:
 
                 # update the base page indirection 
                 base_page_data["indirection"][record_idx] = tail_rid
+                base_page = page_range.base_pages[page_idx]
+                base_page.indirection[record_idx] = tail_rid
                 self.table.database.bufferpool.set_page(
                     base_page_id, self.table.name, base_page_data
                 )
@@ -596,11 +593,6 @@ class Query:
                     self.table.merge_counter = 0
                     self.table.trigger_merge()
                     
-                print("Base indirection before:", base_page_data["indirection"][record_idx])
-                print("New tail RID:", tail_rid)
-                base_page_data["indirection"][record_idx] = tail_rid
-                print("Base indirection after:", base_page_data["indirection"][record_idx])
-
                 return True
 
             except Exception as e:

@@ -466,48 +466,40 @@ class LockManager:
         Returns:
             bool: True if the lock was acquired and False otherwise
         """
-        print(f"LockManager: transaction {transaction_id} requesting {operation} lock on record {record_id}")
+        # Determine the lock type based on the operation
+        lock_type = "exclusive" if operation in ["update", "insert", "delete"] else "shared"
         with self.mutex:
-            # Determine the lock type based on the operation
-            lock_type = "exclusive" if operation in ["update", "insert", "delete"] else "shared"
-
-            # Initialize lock state if the record is not already locked
+            # Initialize the lock state if the record is not yet present.
             if record_id not in self.locks:
                 self.locks[record_id] = (set(), None)
-
             shared_lock_tids, exclusive_lock_tid = self.locks[record_id]
 
             if lock_type == "shared":
-                # Allow shared lock if no exclusive lock exists or if this transaction already holds the exclusive lock
+                # Grant shared lock if no exclusive lock exists or if this transaction already holds exclusive
                 if exclusive_lock_tid is None or exclusive_lock_tid == transaction_id:
                     shared_lock_tids.add(transaction_id)
-                    print(f"LockManager: Granted shared lock to transaction {transaction_id} on record {record_id}")
+                    self.locks[record_id] = (shared_lock_tids, exclusive_lock_tid)
                     return True
-                print(f"LockManager: Denied shared lock to transaction {transaction_id} on record {record_id}")
                 return False
 
             elif lock_type == "exclusive":
-                # Allow exclusive lock if:
-                # 1. No other locks exist, or
-                # 2. This transaction already holds the exclusive lock, or
-                # 3. This transaction holds the only shared lock and no exclusive lock exists
-                if (not shared_lock_tids and exclusive_lock_tid is None) or \
-                        exclusive_lock_tid == transaction_id or \
-                        (shared_lock_tids == {transaction_id} and exclusive_lock_tid is None):
-                    # Upgrade or set exclusive lock
-                    self.locks[record_id] = (set(), transaction_id)
-                    print(f"LockManager: Granted exclusive lock to transaction {transaction_id} on record {record_id}")
+                # If the transaction already holds an exclusive lock, nothing to do
+                if exclusive_lock_tid == transaction_id:
                     return True
-                print(f"LockManager: Denied exclusive lock to transaction {transaction_id} on record {record_id}")
+                # If no locks are held, grant exclusive lock
+                if not shared_lock_tids and exclusive_lock_tid is None:
+                    self.locks[record_id] = (set(), transaction_id)
+                    return True
+                # Allow lock upgrade if this transaction is the only one holding a shared lock
+                if transaction_id in shared_lock_tids and len(shared_lock_tids) == 1 and exclusive_lock_tid is None:
+                    self.locks[record_id] = (set(), transaction_id)
+                    return True
                 return False
 
     def release_lock(self, transaction_id, record_id):
         """
-        Releases a lock held by a transaction on a specific record
-
-        Arguments:
-            transaction_id (int): The ID of the transaction releasing the lock
-            record_id (int): The ID of the record to unlock
+        Releases any lock held by the transaction on the record
+        If no locks remain, the record entry is removed
         """
         with self.mutex:
             # Do nothing if the record is not locked
@@ -524,10 +516,8 @@ class LockManager:
             if exclusive_lock_tid == transaction_id:
                 exclusive_lock_tid = None
 
-            # Update the lock state
-            self.locks[record_id] = (shared_lock_tids, exclusive_lock_tid)
-
-            # Clean up the lock entry if no locks remain
+            # If no locks remain, remove the entry; otherwise update it
             if not shared_lock_tids and exclusive_lock_tid is None:
                 del self.locks[record_id]
-
+            else:
+                self.locks[record_id] = (shared_lock_tids, exclusive_lock_tid)
