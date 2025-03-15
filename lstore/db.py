@@ -2,7 +2,7 @@ import os
 import msgpack
 from lstore.config import BUFFERPOOL_SIZE, MAX_BASE_PAGES, RECORDS_PER_PAGE, DEFAULT_DB_PATH
 from lstore.table import Table, Record
-from threading import RLock, Condition
+from threading import RLock
 
 
 
@@ -453,7 +453,6 @@ class LockManager:
         """
         self.locks = {}  # key: rid, value: (set of shared lock tids, exclusive lock tid or None)
         self.mutex = RLock()
-        self.cond = Condition(self.mutex)
 
     def acquire_lock(self, transaction_id, record_id, operation):
         """
@@ -470,39 +469,39 @@ class LockManager:
         # Determine the lock type based on the operation
         lock_type = "exclusive" if operation in ["update", "insert", "delete"] else "shared"
         with self.mutex:
-            # Initialize the lock state if the record is not yet present
-            while True:
-                if record_id not in self.locks:
-                    self.locks[record_id] = (set(), None)
-                shared_lock_tids, exclusive_lock_tid = self.locks[record_id]
+            # Initialize the lock state if the record is not yet present.
+            if record_id not in self.locks:
+                self.locks[record_id] = (set(), None)
+            shared_lock_tids, exclusive_lock_tid = self.locks[record_id]
 
-                if lock_type == "shared":
-                    # Grant shared lock if no exclusive lock exists or if this transaction already holds exclusive
-                    if exclusive_lock_tid is None or exclusive_lock_tid == transaction_id:
-                        shared_lock_tids.add(transaction_id)
-                        self.locks[record_id] = (shared_lock_tids, exclusive_lock_tid)
-                        return True
-                elif lock_type == "exclusive":
-                    # If the transaction already holds an exclusive lock, nothing to do
-                    if exclusive_lock_tid == transaction_id:
-                        return True
-                    # If no locks are held, grant exclusive lock
-                    if not shared_lock_tids and exclusive_lock_tid is None:
-                        self.locks[record_id] = (set(), transaction_id)
-                        return True
-                    # Allow lock upgrade if this transaction is the only one holding a shared lock
-                    if transaction_id in shared_lock_tids and len(shared_lock_tids) == 1 and exclusive_lock_tid is None:
-                        self.locks[record_id] = (set(), transaction_id)
-                        return True
-                    # Basically listens to see if the lock was released
-                    self.cond.wait(timeout=0.01)
+            if lock_type == "shared":
+                # Grant shared lock if no exclusive lock exists or if this transaction already holds exclusive
+                if exclusive_lock_tid is None or exclusive_lock_tid == transaction_id:
+                    shared_lock_tids.add(transaction_id)
+                    self.locks[record_id] = (shared_lock_tids, exclusive_lock_tid)
+                    return True
+                return False
+
+            elif lock_type == "exclusive":
+                # If the transaction already holds an exclusive lock, nothing to do
+                if exclusive_lock_tid == transaction_id:
+                    return True
+                # If no locks are held, grant exclusive lock
+                if not shared_lock_tids and exclusive_lock_tid is None:
+                    self.locks[record_id] = (set(), transaction_id)
+                    return True
+                # Allow lock upgrade if this transaction is the only one holding a shared lock
+                if transaction_id in shared_lock_tids and len(shared_lock_tids) == 1 and exclusive_lock_tid is None:
+                    self.locks[record_id] = (set(), transaction_id)
+                    return True
+                return False
 
     def release_lock(self, transaction_id, record_id):
         """
         Releases any lock held by the transaction on the record
         If no locks remain, the record entry is removed
         """
-        with self.cond:
+        with self.mutex:
             # Do nothing if the record is not locked
             if record_id not in self.locks:
                 return
@@ -522,5 +521,3 @@ class LockManager:
                 del self.locks[record_id]
             else:
                 self.locks[record_id] = (shared_lock_tids, exclusive_lock_tid)
-            # Tell all the waiting transactions lock state changed
-            self.cond.notify_all()

@@ -323,7 +323,7 @@ class Table:
                                 )
 
                     # Apply only the most recent updates
-                    updated_columns = {tuple(base_rid): set() for base_rid in list(base_page.rid)}
+                    updated_columns = {base_rid: set() for base_rid in base_page.rid}
                     for base_rid, (
                         tail_page_index,
                         record_index,
