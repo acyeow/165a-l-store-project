@@ -155,10 +155,10 @@ class Query:
                 
                 # Get the latest version through indirection
                 latest_rid = self._get_latest_version(base_rid)
-                print(f"Latest RID: {latest_rid}")
+                # print(f"Latest RID: {latest_rid}")
                 # Retrieve the record
                 record = self.table.find_record(search_key, latest_rid, projected_columns_index)
-                print(f"Record found: {record}")
+                # print(f"Record found: {record}")
                 result.append(record)
                 
             except Exception as e:
