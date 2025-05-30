@@ -27,12 +27,7 @@ Unlike traditional systems that require separate engines or data copies for OLTP
 - **2-Hop Access Guarantee**: Fast point queries with at most 2-hop access to the latest version
 - **Lazy Background Merging**: Asynchronous merging process that doesn't block ongoing transactions
 
-### Technical Capabilities
-
-<div style="display: flex; justify-content: space-between; gap: 20px;">
-<div>
-
-#### Storage & Indexing
+### Storage & Indexing
 
 - **Columnar Layout**: Optimized for analytical workloads
 - **Base & Tail Pages**: Read-optimized base data with append-only updates
