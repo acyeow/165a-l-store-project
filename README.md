@@ -1,14 +1,10 @@
-# L-Store: Hybrid Transactional/Analytical Database
+# L-Store: HTAP Database
 
 <div align="center">
   <img src="https://img.shields.io/badge/python-3.7%2B-blue" alt="Python 3.7+">
   <img src="https://img.shields.io/badge/license-Apache%202.0-green" alt="License">
   <img src="https://img.shields.io/badge/storage-column--oriented-orange" alt="Storage">
   <img src="https://img.shields.io/badge/transactions-ACID-red" alt="ACID">
-</div>
-
-<div align="center">
-  <h3>A single unified engine for both OLTP and OLAP workloads</h3>
 </div>
 
 ## 📋 Overview
