@@ -7,77 +7,105 @@
   <img src="https://img.shields.io/badge/transactions-ACID-red" alt="ACID">
 </div>
 
-## Overview
+<div align="center">
+  <h3>A single unified engine for both OLTP and OLAP workloads</h3>
+</div>
 
-L-Store is a high-performance, hybrid transactional/analytical processing (HTAP) database system based on the [L-Store research paper](https://arxiv.org/pdf/1601.04084). This implementation provides a database that excels at both OLTP (Online Transaction Processing) and OLAP (Online Analytical Processing) workloads, eliminating the traditional separation between transactional and analytical systems.
+## 📋 Overview
 
-## Key Features
+L-Store is a high-performance database system that eliminates the traditional divide between transactional (OLTP) and analytical (OLAP) processing. Based on the groundbreaking [L-Store research paper](https://arxiv.org/pdf/1601.04084), this implementation delivers:
 
-- **Hybrid OLTP/OLAP Architecture**: Single system optimized for both transactional and analytical workloads
-- **Multi-Version Concurrency Control**: Historical query support with efficient version management
-- **Column-Oriented Storage**: Optimized for analytical queries with column-wise data organization
-- **ACID Transactions**: Full support for ACID properties with 2-phase locking
-- **Efficient Data Updates**: Update-in-place functionality without blocking analytical queries
-- **Buffer Pool Management**: Memory-optimized page access with LRU eviction policy
-- **B+ Tree Indexing**: Fast record lookups with dynamic index creation
+- Real-time analytics on the latest transactional data
+- High throughput for both read and write operations
+- Columnar storage with efficient version management
+- Multi-version concurrency control without read/write contentions
 
-## Technical Architecture
+Unlike traditional systems that require separate engines or data copies for OLTP and OLAP workloads, L-Store uses a novel lineage-based architecture to support both workloads simultaneously in a single unified engine.
 
-### Storage Model
+## 🚀 Key Features
 
-L-Store uses a unique storage architecture combining:
+### Architecture Innovations
 
-- **Page Ranges**: Logical grouping of base and tail pages
-- **Base Pages**: Compressed, read-optimized, columnar storage for baseline record data
-- **Tail Pages**: Append-only, update storage that maintains historical versions
-- **Indirection**: Efficient record versioning through indirection pointers
+- **Unified Storage Model**: Single representation for both transactional and analytical workloads
+- **Lineage-based Updates**: Contention-free update mechanism over native columnar storage
+- **2-Hop Access Guarantee**: Fast point queries with at most 2-hop access to the latest version
+- **Lazy Background Merging**: Asynchronous merging process that doesn't block ongoing transactions
 
-### Transaction Management
+### Technical Capabilities
 
-The implementation includes a robust transaction system that provides:
+<div style="display: flex; justify-content: space-between; gap: 20px;">
+<div>
 
-- **Concurrency Control**: Thread-safe operations with fine-grained locking
-- **Transaction Workers**: Multi-threaded transaction execution
-- **Lock Manager**: Resource management to prevent conflicts and deadlocks
-- **Rollback Capability**: Automatic transaction abort with state restoration
+#### Storage & Indexing
+- **Columnar Layout**: Optimized for analytical workloads
+- **Base & Tail Pages**: Read-optimized base data with append-only updates
+- **Range Partitioning**: Efficient update clustering and merge processing
+- **B+ Tree Indexing**: Fast record lookups with efficient version tracking
 
-### Query Engine
+</div>
+<div>
 
-L-Store supports a variety of query operations:
+#### Transaction Processing
+- **ACID Compliance**: Full transactional guarantees
+- **MVCC**: Multi-version concurrency control for snapshot isolation
+- **Latch-Free Design**: Minimal contention between readers and writers
+- **Copy-on-Write**: Non-destructive updates preserving record history
 
-- `SELECT`: Retrieve records with filtering and projection
-- `INSERT`: Add new records with automatic key validation
-- `UPDATE`: Modify existing records with versioning
-- `DELETE`: Remove records while maintaining referential integrity
-- `SUM`: Aggregate data across records with version awareness
+</div>
+</div>
 
-### Performance Optimization
+## 📐 Technical Architecture
 
-- **Bufferpool**: In-memory caching to minimize disk I/O
-- **Merge Operation**: Background process to consolidate updates for read optimization
-- **Indexing**: Dynamic index creation on any column
-- **Version Selection**: Efficient access to historical data
+### Storage Organization
 
-## Implementation Details
+L-Store uses a unique storage architecture that separates data into:
 
-### Core Components
+```
+┌─────────────────────┐       ┌─────────────────────┐
+│    BASE PAGES       │       │     TAIL PAGES      │
+│                     │       │                     │
+│  Read-Optimized     │       │  Write-Optimized    │
+│  Compressed         │◄─────►│  Append-Only        │
+│  Read-Only          │       │  Latest Updates     │
+└─────────────────────┘       └─────────────────────┘
+         ▲                              ▲
+         │                              │
+         └──────────────────────────────┘
+                Merged Periodically
+```
 
-- **Table**: Manages records, page allocation and schema
-- **Page**: Fixed-size storage unit with logical organization
-- **Index**: B+ Tree implementation for efficient lookups
-- **Query**: Operations interface for data manipulation
-- **Transaction**: ACID-compliant multi-operation units of work
-- **Bufferpool**: Memory management for page data
+- **Base Pages**: Compressed, read-optimized pages containing the baseline version of records
+- **Tail Pages**: Append-only pages storing updates to base records
+- **Page Directory**: Maps record identifiers to physical locations
+- **Indirection Column**: Efficiently tracks record versions through forward/backward pointers
 
-### Technical Highlights
+### Meta-Data Columns
 
-- **Copy-on-Write**: Non-destructive updates for analytical consistency
-- **Lazy Merging**: Background consolidation of updates for read performance
-- **Lineage-based Versioning**: Efficient tracking of record update history
-- **Adaptive Page Management**: Dynamic allocation of storage resources
-- **Thread-Safe Operations**: Lock-based concurrency with deadlock prevention
+Each table contains several meta-data columns to support the lineage-based architecture:
 
-## Getting Started
+- **Indirection Column**: Stores pointers to the latest version of records
+- **Schema Encoding Column**: Bitmap indicating which columns have been updated
+- **Start Time Column**: Timestamps for tracking record versions
+- **Last Updated Time Column**: Populated after merge operations
+
+### Update Mechanism
+
+L-Store's unique update approach:
+1. Creates tail records for changed values
+2. Preserves the original values in separate tail records
+3. Updates the indirection pointer in base records
+4. Maintains all versions for historical queries
+
+### Merge Process
+
+The contention-free merge process:
+1. Operates only on stable data (committed records)
+2. Consolidates base pages with recent updates asynchronously
+3. Creates new merged pages without blocking ongoing transactions
+4. Updates page directory pointers atomically
+5. Applies epoch-based page deallocation after query completion
+
+## 💻 Getting Started
 
 ### Prerequisites
 
@@ -119,9 +147,6 @@ query.update(1, None, 92, None, None, None)
 
 # Aggregate records
 sum_result = query.sum(1, 50, 1)  # Sum of column 1 for keys 1-50
-
-# Close database
-db.close()
 ```
 
 ### Transaction Support
@@ -144,7 +169,7 @@ worker.run()
 worker.join()
 ```
 
-## Project Structure
+## 📂 Project Structure
 
 ```
 lstore/
@@ -160,7 +185,7 @@ lstore/
 └── transaction_worker.py  # Concurrent transaction execution
 ```
 
-## Future Enhancements
+## 🔮 Future Directions
 
 - Query optimizer for complex analytical workloads
 - Distributed storage and processing capabilities
