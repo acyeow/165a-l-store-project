@@ -13,7 +13,7 @@
 
 ## 📋 Overview
 
-L-Store is a high-performance database system that eliminates the traditional divide between transactional (OLTP) and analytical (OLAP) processing. Based on the groundbreaking [L-Store research paper](https://arxiv.org/pdf/1601.04084), this implementation delivers:
+L-Store is a high-performance database system that eliminates the traditional divide between transactional (OLTP) and analytical (OLAP) processing. Based on the [L-Store research paper](https://arxiv.org/pdf/1601.04084), this implementation delivers:
 
 - Real-time analytics on the latest transactional data
 - High throughput for both read and write operations
@@ -24,7 +24,7 @@ Unlike traditional systems that require separate engines or data copies for OLTP
 
 ## 🚀 Key Features
 
-### Architecture Innovations
+### Architecture
 
 - **Unified Storage Model**: Single representation for both transactional and analytical workloads
 - **Lineage-based Updates**: Contention-free update mechanism over native columnar storage
@@ -37,42 +37,17 @@ Unlike traditional systems that require separate engines or data copies for OLTP
 <div>
 
 #### Storage & Indexing
+
 - **Columnar Layout**: Optimized for analytical workloads
 - **Base & Tail Pages**: Read-optimized base data with append-only updates
 - **Range Partitioning**: Efficient update clustering and merge processing
 - **B+ Tree Indexing**: Fast record lookups with efficient version tracking
-
-</div>
-<div>
-
-#### Transaction Processing
-- **ACID Compliance**: Full transactional guarantees
-- **MVCC**: Multi-version concurrency control for snapshot isolation
-- **Latch-Free Design**: Minimal contention between readers and writers
-- **Copy-on-Write**: Non-destructive updates preserving record history
-
-</div>
-</div>
 
 ## 📐 Technical Architecture
 
 ### Storage Organization
 
 L-Store uses a unique storage architecture that separates data into:
-
-```
-┌─────────────────────┐       ┌─────────────────────┐
-│    BASE PAGES       │       │     TAIL PAGES      │
-│                     │       │                     │
-│  Read-Optimized     │       │  Write-Optimized    │
-│  Compressed         │◄─────►│  Append-Only        │
-│  Read-Only          │       │  Latest Updates     │
-└─────────────────────┘       └─────────────────────┘
-         ▲                              ▲
-         │                              │
-         └──────────────────────────────┘
-                Merged Periodically
-```
 
 - **Base Pages**: Compressed, read-optimized pages containing the baseline version of records
 - **Tail Pages**: Append-only pages storing updates to base records
@@ -91,6 +66,7 @@ Each table contains several meta-data columns to support the lineage-based archi
 ### Update Mechanism
 
 L-Store's unique update approach:
+
 1. Creates tail records for changed values
 2. Preserves the original values in separate tail records
 3. Updates the indirection pointer in base records
@@ -99,75 +75,12 @@ L-Store's unique update approach:
 ### Merge Process
 
 The contention-free merge process:
+
 1. Operates only on stable data (committed records)
 2. Consolidates base pages with recent updates asynchronously
 3. Creates new merged pages without blocking ongoing transactions
 4. Updates page directory pointers atomically
 5. Applies epoch-based page deallocation after query completion
-
-## 💻 Getting Started
-
-### Prerequisites
-
-```bash
-python 3.7+
-```
-
-### Installation
-
-```bash
-pip install -r requirements.txt
-```
-
-### Basic Usage
-
-```python
-from lstore.db import Database
-from lstore.query import Query
-
-# Create database instance
-db = Database()
-db.open('./mydb')
-
-# Create table with 5 columns, primary key at index 0
-grades_table = db.create_table('Grades', 5, 0)
-
-# Create query object
-query = Query(grades_table)
-
-# Insert a record
-query.insert(1, 90, 85, 95, 100)
-
-# Select a record
-record = query.select(1, 0, [1, 1, 1, 1, 1])[0]
-print(record)
-
-# Update a record
-query.update(1, None, 92, None, None, None)
-
-# Aggregate records
-sum_result = query.sum(1, 50, 1)  # Sum of column 1 for keys 1-50
-```
-
-### Transaction Support
-
-```python
-from lstore.transaction import Transaction
-from lstore.transaction_worker import TransactionWorker
-
-# Create transaction
-transaction = Transaction()
-
-# Add operations to transaction
-transaction.add_query(query.select, grades_table, 1, 0, [1, 1, 1, 1, 1])
-transaction.add_query(query.update, grades_table, 1, None, 95, None, None, None)
-
-# Create and run transaction worker
-worker = TransactionWorker()
-worker.add_transaction(transaction)
-worker.run()
-worker.join()
-```
 
 ## 📂 Project Structure
 
