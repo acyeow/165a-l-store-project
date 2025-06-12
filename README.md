@@ -2,7 +2,8 @@
 
 ## Overview
 
-L-Store is a high-performance database system that eliminates the traditional divide between transactional (OLTP) and analytical (OLAP) processing. Based on the [L-Store research paper](https://arxiv.org/pdf/1601.04084), this implementation delivers:
+L-Store is a high-performance database system that eliminates the traditional divide between transactional (OLTP) and analytical (OLAP) processing.
+This is a reimplementation of the [L-Store research paper](https://arxiv.org/pdf/1601.04084).
 
 ### Storage Organization
 
